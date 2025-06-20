@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../lib/kanban_metrics/query_options'
 
 RSpec.describe KanbanMetrics::QueryOptions do
   describe '#initialize' do

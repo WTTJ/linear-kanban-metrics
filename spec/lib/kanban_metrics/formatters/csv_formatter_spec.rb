@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../../lib/kanban_metrics/formatters/csv_formatter'
 
 RSpec.describe KanbanMetrics::Formatters::CsvFormatter do
   # Test Data Setup

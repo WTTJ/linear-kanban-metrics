@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../lib/kanban_metrics/options_parser'
 
 RSpec.describe KanbanMetrics::OptionsParser do
   describe '.parse' do

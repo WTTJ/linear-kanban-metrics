@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../../lib/kanban_metrics/calculators/issue_partitioner'
 
 RSpec.describe KanbanMetrics::Calculators::IssuePartitioner do
   # Arrange - Test data setup

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../../lib/kanban_metrics/formatters/json_formatter'
 
 RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
   # === TEST DATA SETUP ===

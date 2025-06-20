@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../../lib/kanban_metrics/calculators/throughput_calculator'
 
 RSpec.describe KanbanMetrics::Calculators::ThroughputCalculator do
   # === TEST DATA SETUP ===

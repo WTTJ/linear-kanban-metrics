@@ -65,7 +65,7 @@ RSpec.configure do |config|
 
   # Suppress stdout during individual test execution to keep output clean
   # This approach doesn't interfere with test loading and discovery
-  config.around(:each) do |example|
+  config.around do |example|
     if ENV['DEBUG'] || ENV['RSPEC_DEBUG']
       # Run normally in debug mode
       example.run

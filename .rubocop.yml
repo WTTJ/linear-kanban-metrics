@@ -5,7 +5,6 @@ require:
   - rubocop-rspec
 
 plugins:
-  - rubocop-factory_bot
   - rubocop-performance
 
 AllCops:
@@ -22,6 +21,12 @@ AllCops:
 # Gem structure specific settings
 Gemspec/RequiredRubyVersion:
   Enabled: true
+
+# Layout preferences
+Layout/LineLength:
+  Max: 140
+  Exclude:
+    - 'spec/**/*'
 
 # Style preferences
 Style/Documentation:
@@ -76,6 +81,9 @@ Naming/PredicatePrefix:
 Naming/AccessorMethodName:
   Enabled: false
 
+Naming/VariableNumber:
+  Enabled: false
+
 # RSpec specific
 RSpec/ExampleLength:
   Max: 25
@@ -87,7 +95,7 @@ RSpec/NestedGroups:
   Max: 5
 
 RSpec/MultipleMemoizedHelpers:
-  Max: 10
+  Max: 15
 
 RSpec/VerifiedDoubles:
   Enabled: false
@@ -104,5 +112,27 @@ RSpec/SpecFilePathFormat:
 RSpec/SpecFilePathSuffix:
   Enabled: false
 
+RSpec/FilePath:
+  Enabled: false
+
+RSpec/MessageSpies:
+  Enabled: false
+
+RSpec/ContextWording:
+  Enabled: false
+
+RSpec/IndexedLet:
+  Enabled: false
+
+RSpec/MultipleDescribes:
+  Enabled: false
+
+RSpec/NamedSubject:
+  Enabled: false
+
 RSpec/PredicateMatcher:
+  Enabled: false
+
+# Capybara RSpec cops - disable problematic ones
+Capybara/RSpec/PredicateMatcher:
   Enabled: false

@@ -10,6 +10,9 @@ module KanbanMetrics
     # - Average issues completed per week
     # - Total completed issues count
     class ThroughputCalculator
+      # Constant for invalid date grouping key
+      INVALID_DATE_KEY = 'invalid-date'
+
       # Initialize with array of completed issues
       #
       # @param completed_issues [Array<Hash>] Array of issue hashes with 'completedAt' field
@@ -113,7 +116,10 @@ module KanbanMetrics
       # @return [String] Week identifier or invalid date key
       def parse_completion_date(completed_at)
         Date.parse(completed_at).strftime('%Y-W%U')
-      rescue Date::Error, ArgumentError => e
+      rescue Date::Error => e
+        log_warning("Invalid date '#{completed_at}' - #{e.message}")
+        INVALID_DATE_KEY
+      rescue ArgumentError => e
         log_warning("Invalid date '#{completed_at}' - #{e.message}")
         INVALID_DATE_KEY
       end
@@ -134,9 +140,6 @@ module KanbanMetrics
 
         (values.sum.to_f / values.size).round(2)
       end
-
-      # Constant for invalid date grouping key
-      INVALID_DATE_KEY = 'invalid-date'
     end
   end
 end

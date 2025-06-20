@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../../lib/kanban_metrics/formatters/timeseries_table_formatter'
 
 RSpec.describe KanbanMetrics::Formatters::TimeseriesTableFormatter do
   # Test Data Setup

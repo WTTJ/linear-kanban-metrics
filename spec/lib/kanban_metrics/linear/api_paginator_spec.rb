@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../../lib/kanban_metrics/linear/api_paginator'
 
 RSpec.describe KanbanMetrics::Linear::ApiPaginator do
   # Test Data Setup

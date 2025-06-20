@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../../lib/kanban_metrics/linear/http_client'
 
 RSpec.describe KanbanMetrics::Linear::HttpClient, :vcr do
   # For VCR tests, use environment variable or fallback to test token

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../../lib/kanban_metrics/linear/client'
 
 RSpec.describe KanbanMetrics::Linear::Client do
   # Test Data Setup

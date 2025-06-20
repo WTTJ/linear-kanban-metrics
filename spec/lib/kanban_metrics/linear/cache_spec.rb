@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../../lib/kanban_metrics/linear/cache'
 
 RSpec.describe KanbanMetrics::Linear::Cache do
   # === TEST DATA ===

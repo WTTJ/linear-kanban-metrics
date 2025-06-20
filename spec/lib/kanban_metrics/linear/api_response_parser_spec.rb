@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require_relative '../../../../lib/kanban_metrics/linear/api_response_parser'
 
 RSpec.describe KanbanMetrics::Linear::ApiResponseParser do
   subject(:parser) { described_class.new(response) }
