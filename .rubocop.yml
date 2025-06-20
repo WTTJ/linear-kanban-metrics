@@ -112,9 +112,6 @@ RSpec/SpecFilePathFormat:
 RSpec/SpecFilePathSuffix:
   Enabled: false
 
-RSpec/FilePath:
-  Enabled: false
-
 RSpec/MessageSpies:
   Enabled: false
 
