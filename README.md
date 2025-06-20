@@ -84,9 +84,6 @@ The script now supports automatic pagination to fetch **all issues** from your L
 # Automatically fetches all issues (may be thousands!)
 ruby kanban_metrics.rb
 
-# Use larger page sizes for faster fetching of large datasets
-ruby kanban_metrics.rb --page-size 500
-
 # The script will show pagination progress for large datasets
 ### 📄 Pagination Support
 
@@ -114,7 +111,7 @@ DEBUG=true ruby kanban_metrics.rb
 # ✅ Successfully fetched 5015 total issues from Linear API
 ```
 
-## �👥 Team Metrics (Optional)
+## 👥 Team Metrics (Optional)
 
 By default, the script shows only overall metrics for improved performance and cleaner output. Use the `--team-metrics` flag to include detailed team breakdowns:
 
@@ -147,7 +144,7 @@ ruby kanban_metrics.rb --include-archived --start-date "2024-01-01" --end-date "
 
 **Cache Behavior**: Requests with and without archived tickets are cached separately, so you can switch between modes without cache conflicts.
 
-## � Smart Caching
+## Smart Caching
 
 The script includes intelligent caching to avoid unnecessary API calls and improve performance:
 
@@ -184,7 +181,7 @@ DEBUG=true ruby kanban_metrics.rb
 # 💾 Saved 513 issues to cache
 ```
 
-## �📈 Timeseries Analysis
+## 📈 Timeseries Analysis
 
 The script now includes powerful timeseries analysis capabilities to track status changes over time:
 
