@@ -133,3 +133,7 @@ RSpec/PredicateMatcher:
 # Capybara RSpec cops - disable problematic ones
 Capybara/RSpec/PredicateMatcher:
   Enabled: false
+
+# FactoryBot cops - disable problematic ones
+FactoryBot/AssociationStyle:
+  Enabled: false

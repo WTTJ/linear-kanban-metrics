@@ -4,7 +4,7 @@ require 'date'
 
 module KanbanMetrics
   module Calculators
-    # Calculates throughput metrics for completed issues
+    # Calculates throughput for completed issues
     #
     # Provides weekly throughput statistics including:
     # - Average issues completed per week
@@ -116,9 +116,6 @@ module KanbanMetrics
       # @return [String] Week identifier or invalid date key
       def parse_completion_date(completed_at)
         Date.parse(completed_at).strftime('%Y-W%U')
-      rescue Date::Error => e
-        log_warning("Invalid date '#{completed_at}' - #{e.message}")
-        INVALID_DATE_KEY
       rescue ArgumentError => e
         log_warning("Invalid date '#{completed_at}' - #{e.message}")
         INVALID_DATE_KEY

@@ -213,6 +213,11 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
       private
 
       def setup_formatters
+        setup_table_formatter
+        setup_timeseries_formatter
+      end
+
+      def setup_table_formatter
         allow(KanbanMetrics::Formatters::TableFormatter).to receive(:new)
           .and_return(mock_table_formatter)
         allow(mock_table_formatter).to receive(:print_summary)
@@ -221,7 +226,9 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
         allow(mock_table_formatter).to receive(:print_throughput)
         allow(mock_table_formatter).to receive(:print_team_metrics)
         allow(mock_table_formatter).to receive(:print_kpi_definitions)
+      end
 
+      def setup_timeseries_formatter
         allow(KanbanMetrics::Formatters::TimeseriesTableFormatter).to receive(:new)
           .with(sample_timeseries)
           .and_return(mock_timeseries_formatter)
