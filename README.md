@@ -11,7 +11,7 @@ bundle install
 
 2. Create a `.env` file from the example:
 ```bash
-cp .env.example .env
+cp config/.env.example config/.env
 ```
 
 3. Get your Linear API token from [Linear Settings](https://linear.app/settings/api) and add it to your `.env` file:
