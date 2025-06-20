@@ -76,7 +76,7 @@ ruby kanban_metrics.rb --start-date "2024-01-01" --end-date "2024-12-31" --inclu
 - **Work in Progress (WIP)**: Number of items currently in progress
 - **Flow Efficiency**: Percentage of time spent on active work vs waiting
 
-## � Automatic Pagination
+## Automatic Pagination
 
 The script now supports automatic pagination to fetch **all issues** from your Linear workspace, not just the first 250. The script will automatically fetch multiple pages until all issues matching your criteria are retrieved.
 
