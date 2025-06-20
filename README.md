@@ -149,7 +149,7 @@ ruby kanban_metrics.rb --include-archived --start-date "2024-01-01" --end-date "
 The script includes intelligent caching to avoid unnecessary API calls and improve performance:
 
 ### How It Works
-- **Automatic Caching**: API responses are cached in `.linear_cache/` directory
+- **Automatic Caching**: API responses are cached in `tmp/.linear_cache` directory
 - **Cache Key**: Based on search criteria (team, dates, etc.)
 - **Cache Expiry**: Cached data expires at the start of the next day
 - **Cache Hit**: Shows "✅ Using cached data" when cache is used
