@@ -1,8 +1,28 @@
 # frozen_string_literal: true
 
+require 'rspec'
 require 'bundler/setup'
 require 'dotenv'
 require 'faker'
+
+# Configure SimpleCov if coverage is enabled
+if ENV['COVERAGE']
+  require 'simplecov'
+
+  SimpleCov.start do
+    add_filter '/spec/'
+    add_filter '/vendor/'
+    add_filter '/tmp/'
+    add_group 'Calculators', 'lib/kanban_metrics/calculators'
+    add_group 'Formatters', 'lib/kanban_metrics/formatters'
+    add_group 'Linear API', 'lib/kanban_metrics/linear'
+    add_group 'Reports', 'lib/kanban_metrics/reports'
+    add_group 'Timeseries', 'lib/kanban_metrics/timeseries'
+
+    minimum_coverage 90
+    minimum_coverage_by_file 80
+  end
+end
 
 # Load environment variables for testing
 Dotenv.load('config/.env.test')
@@ -37,4 +57,27 @@ RSpec.configure do |config|
 
   # Warnings
   config.warnings = true if ENV['WARNINGS']
+
+  # Default to aggregate failures for better test output
+  config.define_derived_metadata do |meta|
+    meta[:aggregate_failures] = true unless meta.key?(:aggregate_failures)
+  end
+
+  # Suppress stdout during individual test execution to keep output clean
+  # This approach doesn't interfere with test loading and discovery
+  config.around(:each) do |example|
+    if ENV['DEBUG'] || ENV['RSPEC_DEBUG']
+      # Run normally in debug mode
+      example.run
+    else
+      # Capture stdout during test execution only
+      original_stdout = $stdout
+      $stdout = StringIO.new
+      begin
+        example.run
+      ensure
+        $stdout = original_stdout
+      end
+    end
+  end
 end

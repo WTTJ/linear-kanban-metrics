@@ -147,7 +147,7 @@ module KanbanMetrics
       end
 
       def current_environment
-        ENV['RACK_ENV'] || ENV['RAILS_ENV'] || 'development'
+        ENV['RACK_ENV'] || 'development'
       end
     end
   end

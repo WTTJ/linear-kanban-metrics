@@ -3,7 +3,10 @@
 require 'spec_helper'
 
 RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
-  # === TEST DATA ===
+  # === TEST DATA SETUP ===
+  # Named Subject
+  subject(:formatter) { described_class.new(metrics, team_metrics, timeseries_data) }
+
   let(:metrics) do
     {
       total_issues: 100,
@@ -52,96 +55,120 @@ RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
   end
 
   let(:timeseries) do
-    double('TimeSeriesCalculator',
-           status_flow_analysis: { 'Todo → In Progress' => 15, 'In Progress → Done' => 12 },
-           average_time_in_status: { 'Todo' => 3.2, 'In Progress' => 5.8, 'Done' => 0.1 },
-           daily_status_counts: { Date.today => { 'completed' => 3, 'started' => 2 } })
+    instance_double(KanbanMetrics::Timeseries::TicketTimeseries,
+                    status_flow_analysis: { 'Todo → In Progress' => 15, 'In Progress → Done' => 12 },
+                    average_time_in_status: { 'Todo' => 3.2, 'In Progress' => 5.8, 'Done' => 0.1 },
+                    daily_status_counts: { Date.today => { 'completed' => 3, 'started' => 2 } })
   end
 
   describe '#initialize' do
-    context 'when initializing with metrics and team metrics' do
+    context 'with metrics and team metrics only' do
+      # Setup
+      let(:timeseries_data) { nil }
+
       it 'stores the provided data correctly' do
-        # Arrange
-        # (data setup in let blocks)
-
-        # Act
-        formatter = described_class.new(metrics, team_metrics)
-
-        # Assert
-        aggregate_failures 'initialization with metrics and team metrics' do
+        # Verify
+        aggregate_failures 'initialization data storage' do
           expect(formatter.instance_variable_get(:@metrics)).to eq(metrics)
           expect(formatter.instance_variable_get(:@team_metrics)).to eq(team_metrics)
           expect(formatter.instance_variable_get(:@timeseries)).to be_nil
         end
-
-        # Cleanup
-        # (automatic with let blocks)
       end
     end
 
-    context 'when initializing with timeseries data' do
+    context 'with metrics only' do
+      # Setup
+      let(:team_metrics) { nil }
+      let(:timeseries_data) { nil }
+
+      it 'stores metrics data correctly' do
+        # Verify
+        aggregate_failures 'metrics-only initialization' do
+          expect(formatter.instance_variable_get(:@metrics)).to eq(metrics)
+          expect(formatter.instance_variable_get(:@team_metrics)).to be_nil
+          expect(formatter.instance_variable_get(:@timeseries)).to be_nil
+        end
+      end
+    end
+
+    context 'with all data types' do
+      # Setup
+      let(:timeseries_data) { timeseries }
+
       it 'stores all provided data including timeseries' do
-        # Arrange
-        # (data setup in let blocks)
-
-        # Act
-        formatter = described_class.new(metrics, team_metrics, timeseries)
-
-        # Assert
-        aggregate_failures 'initialization with timeseries data' do
+        # Verify
+        aggregate_failures 'complete data initialization' do
           expect(formatter.instance_variable_get(:@metrics)).to eq(metrics)
           expect(formatter.instance_variable_get(:@team_metrics)).to eq(team_metrics)
           expect(formatter.instance_variable_get(:@timeseries)).to eq(timeseries)
         end
-
-        # Cleanup
-        # (automatic with let blocks)
-      end
-    end
-  end
-
-  describe '#generate' do
-    context 'when generating JSON with only metrics' do
-      it 'produces valid JSON output with overall metrics' do
-        # Arrange
-        formatter = described_class.new(metrics)
-
-        # Act
-        json_output = formatter.generate
-
-        # Assert
-        parsed = JSON.parse(json_output)
-        aggregate_failures 'JSON output with only metrics' do
-          expect(parsed).to have_key('overall_metrics')
-          expect(parsed['overall_metrics']).to eq(metrics.deep_stringify_keys)
-          expect(parsed).not_to have_key('team_metrics')
-          expect(parsed).not_to have_key('timeseries')
-        end
-
-        # Cleanup
-        # (automatic with let blocks)
       end
     end
 
-    context 'when generating JSON with metrics and team metrics' do
-      it 'includes team metrics in the output' do
-        # Arrange
-        formatter = described_class.new(metrics, team_metrics)
+    describe '#generate' do
+      # Execute
+      subject(:parsed_json) { JSON.parse(json_output) }
 
-        # Act
-        json_output = formatter.generate
+      let(:json_output) { formatter.generate }
 
-        # Assert
-        parsed = JSON.parse(json_output)
-        aggregate_failures 'JSON output with team metrics' do
-          expect(parsed).to have_key('overall_metrics')
-          expect(parsed).to have_key('team_metrics')
-          expect(parsed['overall_metrics']).to eq(metrics.deep_stringify_keys)
-          expect(parsed['team_metrics']).to eq(team_metrics.deep_stringify_keys)
+      context 'with only metrics' do
+        # Setup
+        let(:team_metrics) { nil }
+        let(:timeseries_data) { nil }
+
+        it 'produces valid JSON output with overall metrics' do
+          # Verify
+          aggregate_failures 'JSON output structure' do
+            expect(parsed_json).to have_key('overall_metrics')
+            expect(parsed_json['overall_metrics']).to eq(metrics.deep_stringify_keys)
+            expect(parsed_json).not_to have_key('team_metrics')
+            expect(parsed_json).not_to have_key('timeseries')
+          end
         end
 
-        # Cleanup
-        # (automatic with let blocks)
+        it 'generates valid JSON format' do
+          expect { JSON.parse(json_output) }.not_to raise_error
+        end
+      end
+
+      context 'with metrics and team metrics' do
+        # Setup
+        let(:timeseries_data) { nil }
+
+        it 'includes team metrics in the output' do
+          # Verify
+          aggregate_failures 'team metrics inclusion' do
+            expect(parsed_json).to have_key('overall_metrics')
+            expect(parsed_json).to have_key('team_metrics')
+            expect(parsed_json['overall_metrics']).to eq(metrics.deep_stringify_keys)
+            expect(parsed_json['team_metrics']).to eq(team_metrics.deep_stringify_keys)
+          end
+        end
+      end
+
+      context 'with timeseries data' do
+        # Setup
+        let(:timeseries_data) { timeseries }
+
+        it 'includes timeseries data in the output' do
+          # Verify
+          aggregate_failures 'timeseries data inclusion' do
+            expect(parsed_json).to have_key('overall_metrics')
+            expect(parsed_json).to have_key('team_metrics')
+            expect(parsed_json).to have_key('timeseries')
+            expect(parsed_json['timeseries']).to be_a(Hash)
+          end
+        end
+
+        it 'formats timeseries data correctly' do
+          # Verify specific timeseries structure
+          timeseries_data = parsed_json['timeseries']
+          aggregate_failures 'timeseries structure' do
+            expect(timeseries_data).to have_key('status_flow_analysis')
+            expect(timeseries_data).to have_key('average_time_in_status')
+            expect(timeseries_data).to have_key('daily_status_counts')
+          end
+        end
       end
     end
 

@@ -55,7 +55,9 @@ module KanbanMetrics
 
     private_class_method def self.validate_and_set_defaults(options)
       set_environment_defaults(options)
+      set_option_defaults(options)
       validate_page_size(options)
+      validate_format(options)
       options
     end
 
@@ -65,11 +67,33 @@ module KanbanMetrics
       options[:end_date] ||= ENV.fetch('METRICS_END_DATE', nil)
     end
 
-    private_class_method def self.validate_page_size(options)
-      return unless options[:page_size] && options[:page_size] > 250
+    private_class_method def self.set_option_defaults(options)
+      options[:format] ||= 'table'
+      options[:page_size] ||= 250
+      options[:no_cache] = false if options[:no_cache].nil?
+      options[:team_metrics] = false if options[:team_metrics].nil?
+      options[:timeseries] = false if options[:timeseries].nil?
+      options[:include_archived] = false if options[:include_archived].nil?
+    end
 
-      puts "⚠️  Warning: Linear API maximum page size is 250. Using 250 instead of #{options[:page_size]}."
-      options[:page_size] = 250
+    private_class_method def self.validate_page_size(options)
+      return unless options[:page_size]
+
+      if options[:page_size] > 250
+        puts "⚠️  Warning: Linear API maximum page size is 250. Using 250 instead of #{options[:page_size]}."
+        options[:page_size] = 250
+      elsif options[:page_size] < 1
+        puts "⚠️  Warning: Page size must be at least 1. Using 1 instead of #{options[:page_size]}."
+        options[:page_size] = 1
+      end
+    end
+
+    private_class_method def self.validate_format(options)
+      valid_formats = %w[table json csv]
+      return if valid_formats.include?(options[:format])
+
+      puts "⚠️  Warning: Invalid format '#{options[:format]}'. Using 'table' instead."
+      options[:format] = 'table'
     end
   end
 end

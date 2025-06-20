@@ -1,0 +1,83 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: "<LINEAR_API_URL>"
+    body:
+      encoding: UTF-8
+      string: '{"query":"query {\n  issues(filter: { team: { key: { eq: \"test-team-id\"
+        } }, updatedAt: { gte: \"2024-01-01T00:00:00.000Z\", lte: \"2024-01-31T23:59:59.999Z\"
+        } }, first: 10) {\n    pageInfo { hasNextPage endCursor }\n    nodes {\n      id
+        identifier title\n      state { id name type }\n      team { id name }\n      assignee
+        { id name }\n      priority estimate createdAt updatedAt completedAt startedAt
+        archivedAt\n      history(first: 50) {\n        nodes {\n          id createdAt\n          fromState
+        { id name type }\n          toState { id name type }\n        }\n      }\n    }\n  }\n}\n"}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Host:
+      - api.linear.app
+      Authorization:
+      - "<LINEAR_API_TOKEN>"
+      Content-Type:
+      - application/json
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Fri, 20 Jun 2025 14:28:02 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Cf-Ray:
+      - 952bf34c59915bd4-LIS
+      Cf-Cache-Status:
+      - DYNAMIC
+      Cache-Control:
+      - no-store
+      Etag:
+      - W/"53-xojikCRM7ftXac3fXRky+wC2ED0"
+      Via:
+      - 1.1 google
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      X-Complexity:
+      - '198'
+      X-Ratelimit-Complexity-Limit:
+      - '3000000'
+      X-Ratelimit-Complexity-Remaining:
+      - '2999406'
+      X-Ratelimit-Complexity-Reset:
+      - '1750433282773'
+      X-Ratelimit-Requests-Limit:
+      - '1500'
+      X-Ratelimit-Requests-Remaining:
+      - '1494'
+      X-Ratelimit-Requests-Reset:
+      - '1750433282773'
+      X-Request-Id:
+      - 952bf34c81f75bd4-LIS
+      Set-Cookie:
+      - __cf_bm=f.I65IGWlmE8vsLDsgHPL2OXl8cf5wKzJLwY4U_dnIM-1750429682-1.0.1.1-9m8c1wXM3wuopH0zhphhyLZCNevLkSU.mPV9iU0xj3SgkRoDVQbGVNhh0dt9wf4z0dMy9mcOkARCOeoaNkXUDaIdKTCJy7IDix7WJMq9WcU;
+        path=/; expires=Fri, 20-Jun-25 14:58:02 GMT; domain=.linear.app; HttpOnly;
+        Secure; SameSite=None
+      Vary:
+      - Accept-Encoding
+      Server:
+      - cloudflare
+    body:
+      encoding: ASCII-8BIT
+      string: '{"data":{"issues":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}
+
+        '
+  recorded_at: Fri, 20 Jun 2025 14:28:02 GMT
+recorded_with: VCR 6.3.1

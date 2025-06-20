@@ -22,6 +22,7 @@ group :development, :test do
   gem 'rubocop-factory_bot', '~> 2.0'
   gem 'rubocop-performance', '~> 1.12'
   gem 'rubocop-rspec', '~> 2.0'
+  gem 'simplecov', '~> 0.22'
   gem 'vcr', '~> 6.1'
   gem 'webmock', '~> 3.18'
 end

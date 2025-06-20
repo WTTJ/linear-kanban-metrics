@@ -36,6 +36,9 @@ module KanbanMetrics
         query = @query_builder.build_issues_query(options, after_cursor)
         response_data = @http_client.post_graphql(query)
 
+        # Handle nil response
+        return nil if response_data.nil?
+
         # Extract issues data from the response
         issues_data = response_data.dig('data', 'issues')
         return nil unless issues_data

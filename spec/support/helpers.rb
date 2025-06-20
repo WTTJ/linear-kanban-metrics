@@ -17,7 +17,7 @@ module TestHelpers
 
   # Cache management helpers
   def clear_test_cache
-    FileUtils.rm_rf('tmp/.linear_cache')
+    FileUtils.rm_rf('tmp/.linear_cache_test')
   end
 
   # Time helpers for testing cache expiration
@@ -45,6 +45,16 @@ module TestHelpers
         }
       ]
     }
+  end
+
+  # Output capture helper for testing printed output
+  def capture_stdout
+    old_stdout = $stdout
+    $stdout = StringIO.new
+    yield
+    $stdout.string
+  ensure
+    $stdout = old_stdout
   end
 end
 

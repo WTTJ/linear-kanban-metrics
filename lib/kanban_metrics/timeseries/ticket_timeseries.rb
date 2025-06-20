@@ -99,7 +99,7 @@ module KanbanMetrics
       def generate_timeseries
         @issues.map do |issue|
           {
-            id: issue['identifier'],
+            id: issue['identifier'] || issue['id'],
             title: issue['title'],
             team: issue.dig('team', 'name'),
             timeline: @timeline_builder.build_timeline(issue)

@@ -1,0 +1,71 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: "<LINEAR_API_URL>"
+    body:
+      encoding: UTF-8
+      string: '{"query":"query {\n  issues(filter: { team: { key: { eq: \"test-team-id\"
+        } }, updatedAt: { gte: \"2024-01-01T00:00:00.000Z\", lte: \"2024-01-31T23:59:59.999Z\"
+        } }, first: 10) {\n    pageInfo { hasNextPage endCursor }\n    nodes {\n      id
+        identifier title\n      state { id name type }\n      team { id name }\n      assignee
+        { id name }\n      priority estimate createdAt updatedAt completedAt startedAt
+        archivedAt\n      history(first: 50) {\n        nodes {\n          id createdAt\n          fromState
+        { id name type }\n          toState { id name type }\n        }\n      }\n    }\n  }\n}\n"}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Host:
+      - api.linear.app
+      Authorization:
+      - invalid-token
+      Content-Type:
+      - application/json
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Date:
+      - Fri, 20 Jun 2025 14:28:01 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Content-Length:
+      - '289'
+      Connection:
+      - keep-alive
+      Cf-Ray:
+      - 952bf3451c545bdb-LIS
+      Cf-Cache-Status:
+      - DYNAMIC
+      Cache-Control:
+      - no-store
+      Etag:
+      - W/"121-e5i33G0pxvjLoG3GSC4TbQFF8TY"
+      Via:
+      - 1.1 google
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      X-Request-Id:
+      - 952bf345e4f75bdb-LIS
+      Set-Cookie:
+      - __cf_bm=pvp0IgTQ.eYx4RvuAW4qLOMwT7QJQq7YkMIojYIQg1U-1750429681-1.0.1.1-uYXj8QlF4ai2d_3jhofUo3c_Skz2ti5oIMSm_BbnsRb3ngRncllC82ozrOIqCwrl7qzHvoWQ23hEi3Bp7sTC2xKce3K8iEQb6dtVhZBHhR0;
+        path=/; expires=Fri, 20-Jun-25 14:58:01 GMT; domain=.linear.app; HttpOnly;
+        Secure; SameSite=None
+      Vary:
+      - Accept-Encoding
+      Server:
+      - cloudflare
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"message":"Authentication required, not authenticated","extensions":{"type":"authentication
+        error","code":"AUTHENTICATION_ERROR","statusCode":400,"userError":true,"userPresentableMessage":"You
+        need to authenticate to access this operation.","meta":{},"http":{"status":400}}}]}
+
+        '
+  recorded_at: Fri, 20 Jun 2025 14:28:01 GMT
+recorded_with: VCR 6.3.1

@@ -123,7 +123,7 @@ module KanbanMetrics
       end
 
       def team_metrics_available?
-        @team_metrics && !@team_metrics.empty?
+        !@team_metrics.nil? && !@team_metrics.empty?
       end
 
       def print_individual_teams

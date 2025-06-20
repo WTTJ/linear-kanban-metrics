@@ -11,7 +11,7 @@ module KanbanMetrics
       end
 
       def calculate
-        return 0 if @issues.empty?
+        return 0.0 if @issues.empty?
 
         total_efficiency = @issues.sum { |issue| calculate_issue_efficiency(issue) }
         ((total_efficiency / @issues.size) * 100).round(2)
@@ -21,10 +21,10 @@ module KanbanMetrics
 
       def calculate_issue_efficiency(issue)
         history = issue.dig('history', 'nodes') || []
-        return 0 if history.empty?
+        return 0.0 if history.empty?
 
         active_time, total_time = calculate_times(history)
-        total_time.zero? ? 0 : active_time / total_time
+        total_time.zero? ? 0.0 : active_time / total_time
       end
 
       def calculate_times(history)

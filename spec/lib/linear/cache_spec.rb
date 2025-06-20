@@ -109,24 +109,6 @@ RSpec.describe KanbanMetrics::Linear::Cache do
         # Cleanup
         ENV['RACK_ENV'] = original_env
       end
-
-      it 'respects RAILS_ENV when RACK_ENV is not set' do
-        # Arrange
-        original_rack_env = ENV.fetch('RACK_ENV', nil)
-        original_rails_env = ENV.fetch('RAILS_ENV', nil)
-        ENV.delete('RACK_ENV')
-        ENV['RAILS_ENV'] = 'development'
-
-        # Act
-        cache = described_class.new
-
-        # Assert
-        expect(cache.cache_dir).to eq('tmp/.linear_cache_development')
-
-        # Cleanup
-        ENV['RACK_ENV'] = original_rack_env if original_rack_env
-        ENV['RAILS_ENV'] = original_rails_env if original_rails_env
-      end
     end
   end
 
