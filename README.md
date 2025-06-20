@@ -23,7 +23,7 @@ LINEAR_API_TOKEN=your_actual_token_here
 
 Run the script to collect metrics:
 ```bash
-ruby kanban_metrics.rb
+./bin/kanban_metrics
 ```
 
 ### Options
@@ -41,31 +41,31 @@ ruby kanban_metrics.rb
 
 ```bash
 # Basic usage (overall metrics only)
-ruby kanban_metrics.rb
+./bin/kanban_metrics
 
 # Fetch all issues with automatic pagination
-ruby kanban_metrics.rb --page-size 500  # Larger pages for faster fetching
+./bin/kanban_metrics --page-size 500  # Larger pages for faster fetching
 
 # Include team metrics breakdown
-ruby kanban_metrics.rb --team-metrics
+./bin/kanban_metrics --team-metrics
 
 # Filter by team and date range with team metrics
-ruby kanban_metrics.rb --team-id "TEAM123" --start-date "2024-01-01" --end-date "2024-12-31" --team-metrics
+./bin/kanban_metrics --team-id "TEAM123" --start-date "2024-01-01" --end-date "2024-12-31" --team-metrics
 
 # Output as JSON
-ruby kanban_metrics.rb --format json
+./bin/kanban_metrics --format json
 
 # Output as CSV with team metrics
-ruby kanban_metrics.rb --format csv --team-metrics
+./bin/kanban_metrics --format csv --team-metrics
 
 # Include archived tickets in the analysis
-ruby kanban_metrics.rb --include-archived
+./bin/kanban_metrics --include-archived
 
 # Include archived tickets with team metrics
-ruby kanban_metrics.rb --include-archived --team-metrics
+./bin/kanban_metrics --include-archived --team-metrics
 
 # Filter by date range and include archived tickets
-ruby kanban_metrics.rb --start-date "2024-01-01" --end-date "2024-12-31" --include-archived
+./bin/kanban_metrics --start-date "2024-01-01" --end-date "2024-12-31" --include-archived
 ```
 
 ## Metrics Collected
@@ -82,7 +82,7 @@ The script now supports automatic pagination to fetch **all issues** from your L
 
 ```bash
 # Automatically fetches all issues (may be thousands!)
-ruby kanban_metrics.rb
+./bin/kanban_metrics
 
 # The script will show pagination progress for large datasets
 ### 📄 Pagination Support
@@ -91,20 +91,20 @@ The script automatically fetches all issues from Linear using pagination. Linear
 
 ```bash
 # Use default page size (250)
-ruby kanban_metrics.rb
+./bin/kanban_metrics
 
 # Custom page size (automatically capped at 250)
-ruby kanban_metrics.rb --page-size 100
+./bin/kanban_metrics --page-size 100
 
 # Attempting to use >250 will show a warning and use 250
-ruby kanban_metrics.rb --page-size 1000
+./bin/kanban_metrics --page-size 1000
 # ⚠️  Warning: Linear API maximum page size is 250. Using 250 instead of 1000.
 ```
 
 With debug mode enabled, you can see the pagination in action:
 
 ```bash
-DEBUG=true ruby kanban_metrics.rb
+DEBUG=true ./bin/kanban_metrics
 # 📄 Fetching page 1...
 # 📄 Fetching page 2...
 # 📄 Fetching page 3...
@@ -117,10 +117,10 @@ By default, the script shows only overall metrics for improved performance and c
 
 ```bash
 # Show team-specific metrics and comparisons
-ruby kanban_metrics.rb --team-metrics
+./bin/kanban_metrics --team-metrics
 
 # Export team metrics as CSV
-ruby kanban_metrics.rb --team-metrics --format csv
+./bin/kanban_metrics --team-metrics --format csv
 ```
 
 Team metrics include per-team cycle time, lead time, throughput, and a comparison table across all teams.
@@ -131,13 +131,13 @@ By default, the Linear API excludes archived tickets from the results. Use the `
 
 ```bash
 # Default behavior - excludes archived tickets
-ruby kanban_metrics.rb
+./bin/kanban_metrics
 
 # Include archived tickets in the analysis
-ruby kanban_metrics.rb --include-archived
+./bin/kanban_metrics --include-archived
 
 # Include archived tickets with specific date range
-ruby kanban_metrics.rb --include-archived --start-date "2024-01-01" --end-date "2024-12-31"
+./bin/kanban_metrics --include-archived --start-date "2024-01-01" --end-date "2024-12-31"
 ```
 
 **Note**: Including archived tickets may significantly increase the number of results and processing time, as archived tickets can accumulate over long periods.
@@ -159,26 +159,27 @@ The script includes intelligent caching to avoid unnecessary API calls and impro
 
 ```bash
 # First run - fetches from API and caches the response
-ruby kanban_metrics.rb --start-date "2025-01-01"
+./bin/kanban_metrics --start-date "2025-01-01"
 
 # Second run - uses cached data (much faster!)
-ruby kanban_metrics.rb --start-date "2025-01-01"
+./bin/kanban_metrics --start-date "2025-01-01"
 # ✅ Using cached data (5015 issues)
 
 # Force fresh data (bypass cache)
-ruby kanban_metrics.rb --start-date "2025-01-01" --no-cache
+./bin/kanban_metrics --start-date "2025-01-01" --no-cache
 
 # Different search criteria = different cache
-ruby kanban_metrics.rb --start-date "2025-02-01"  # New API call
+./bin/kanban_metrics --start-date "2025-02-01"  # New API call
 ```
 
 ### Cache Debugging
 
 ```bash
 # See cache operations in detail
-DEBUG=true ruby kanban_metrics.rb
-# ✅ Using cached data (513 issues)
-# 💾 Saved 513 issues to cache
+DEBUG=1 ./bin/kanban_metrics
+📄 Fetching page 1...
+🔍 GraphQL Query: issues(first: 250)
+📄 Fetching page 2...
 ```
 
 ## 📈 Timeseries Analysis
@@ -189,16 +190,16 @@ The script now includes powerful timeseries analysis capabilities to track statu
 
 ```bash
 # Include timeseries analysis in the report
-ruby kanban_metrics.rb --timeseries
+./bin/kanban_metrics --timeseries
 
 # View detailed timeline for a specific issue
-ruby kanban_metrics.rb --timeline "ISSUE-123"
+./bin/kanban_metrics --timeline "ISSUE-123"
 
 # Export timeseries data as JSON
-ruby kanban_metrics.rb --timeseries --format json
+./bin/kanban_metrics --timeseries --format json
 
 # Export timeseries data as CSV
-ruby kanban_metrics.rb --timeseries --format csv
+./bin/kanban_metrics --timeseries --format csv
 ```
 
 ### Timeseries Features
