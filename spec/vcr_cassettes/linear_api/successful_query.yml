@@ -1,0 +1,31 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.linear.app/graphql
+    body:
+      encoding: UTF-8
+      string: '{"query":"query {\n  issues(first: 1) {\n    nodes {\n      id\n      title\n    }\n  }\n}\n","variables":{}}'
+    headers:
+      Authorization:
+      - test-token-123
+      Content-Type:
+      - application/json
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '245'
+    body:
+      encoding: UTF-8
+      string: '{"data":{"issues":{"nodes":[{"id":"issue-abc123","title":"Sample Issue for Testing"}]}}}'
+  recorded_at: Thu, 20 Jun 2025 10:00:00 GMT
+recorded_with: VCR 6.1.0

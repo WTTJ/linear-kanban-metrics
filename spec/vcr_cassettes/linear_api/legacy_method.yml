@@ -1,0 +1,31 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.linear.app/graphql
+    body:
+      encoding: UTF-8
+      string: '{"query":"query($first: Int!) {\n  issues(first: $first) {\n    nodes {\n      id\n      title\n      state {\n        name\n      }\n    }\n  }\n}\n","variables":{"first":1}}'
+    headers:
+      Authorization:
+      - test-token-123
+      Content-Type:
+      - application/json
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '275'
+    body:
+      encoding: UTF-8
+      string: '{"data":{"issues":{"nodes":[{"id":"issue-legacy-method","title":"Legacy Method Test","state":{"name":"Done"}}]}}}'
+  recorded_at: Thu, 20 Jun 2025 10:00:00 GMT
+recorded_with: VCR 6.1.0

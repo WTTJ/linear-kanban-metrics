@@ -1,0 +1,108 @@
+# RuboCop configuration for kanban-script gem
+# See https://docs.rubocop.org/rubocop/configuration.html
+
+require:
+  - rubocop-rspec
+
+plugins:
+  - rubocop-factory_bot
+  - rubocop-performance
+
+AllCops:
+  TargetRubyVersion: 3.0
+  NewCops: enable
+  SuggestExtensions: false
+  Exclude:
+    - 'tmp/**/*'
+    - 'vendor/**/*'
+    - 'spec/vcr_cassettes/**/*'
+    - 'kanban_metrics.backup.rb'
+    - 'kanban_metrics_original.rb'
+
+# Gem structure specific settings
+Gemspec/RequiredRubyVersion:
+  Enabled: true
+
+# Style preferences
+Style/Documentation:
+  Enabled: false
+
+Style/StringLiterals:
+  EnforcedStyle: single_quotes
+
+Style/IdenticalConditionalBranches:
+  Enabled: false
+
+Style/ComparableClamp:
+  Enabled: false
+
+# Metrics - Allow slightly larger methods and classes for complex calculations
+Metrics/BlockLength:
+  Exclude:
+    - 'spec/**/*'
+    - 'Guardfile'
+
+Metrics/MethodLength:
+  Max: 25
+  Exclude:
+    - 'lib/kanban_metrics/linear/http_client.rb'  # Complex response handling
+
+Metrics/ClassLength:
+  Max: 160
+  Exclude:
+    - 'lib/kanban_metrics/formatters/table_formatter.rb'  # Table formatting requires many methods
+
+Metrics/AbcSize:
+  Max: 30
+  Exclude:
+    - 'lib/kanban_metrics/linear/http_client.rb'  # Complex response handling
+    - 'lib/kanban_metrics/formatters/csv_formatter.rb'  # CSV formatting logic
+    - 'lib/kanban_metrics/formatters/table_formatter.rb'  # Table formatting with many columns
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+  Exclude:
+    - 'lib/kanban_metrics/linear/http_client.rb'  # Complex response handling
+
+Metrics/PerceivedComplexity:
+  Max: 15
+  Exclude:
+    - 'lib/kanban_metrics/linear/http_client.rb'  # Complex response handling
+
+# Naming conventions
+Naming/PredicatePrefix:
+  Enabled: false
+
+Naming/AccessorMethodName:
+  Enabled: false
+
+# RSpec specific
+RSpec/ExampleLength:
+  Max: 25
+
+RSpec/MultipleExpectations:
+  Enabled: false
+
+RSpec/NestedGroups:
+  Max: 5
+
+RSpec/MultipleMemoizedHelpers:
+  Max: 10
+
+RSpec/VerifiedDoubles:
+  Enabled: false
+
+RSpec/SubjectStub:
+  Enabled: false
+
+RSpec/DescribeClass:
+  Enabled: false
+
+RSpec/SpecFilePathFormat:
+  Enabled: false
+
+RSpec/SpecFilePathSuffix:
+  Enabled: false
+
+RSpec/PredicateMatcher:
+  Enabled: false

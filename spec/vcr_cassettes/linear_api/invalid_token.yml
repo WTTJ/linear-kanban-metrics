@@ -1,0 +1,25 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.linear.app/graphql
+    body:
+      encoding: UTF-8
+      string: '{"query":"query {\n  issues(first: 1) {\n    nodes {\n      id\n      title\n    }\n  }\n}\n"}'
+    headers:
+      Authorization:
+      - invalid-token
+      Content-Type:
+      - application/json
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Content-Type:
+      - application/json
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"message":"Authentication required, not authenticated","extensions":{"code":"AUTHENTICATION_ERROR"}}]}'
+  recorded_at: Thu, 20 Jun 2025 09:00:00 GMT
+recorded_with: VCR 6.1.0

@@ -1,0 +1,31 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.linear.app/graphql
+    body:
+      encoding: UTF-8
+      string: '{"query":"query {\n  issues(first: 1) {\n    nodes {\n      id\n      title\n    }\n  }\n}\n","variables":{}}'
+    headers:
+      Authorization:
+      - ''
+      Content-Type:
+      - application/json
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 401
+      message: Unauthorized
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '82'
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"message":"Authentication required","extensions":{"code":"UNAUTHENTICATED"}}]}'
+  recorded_at: Thu, 20 Jun 2025 10:00:00 GMT
+recorded_with: VCR 6.1.0

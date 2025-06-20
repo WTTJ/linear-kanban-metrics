@@ -1,0 +1,31 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.linear.app/graphql
+    body:
+      encoding: UTF-8
+      string: '{"query":"query($first: Int, $after: String) {\n  issues(first: $first, after: $after) {\n    nodes {\n      id\n      title\n    }\n    pageInfo {\n      hasNextPage\n      endCursor\n    }\n  }\n}\n","variables":{"first":10,"after":null}}'
+    headers:
+      Authorization:
+      - test-token-123
+      Content-Type:
+      - application/json
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '456'
+    body:
+      encoding: UTF-8
+      string: '{"data":{"issues":{"nodes":[{"id":"issue-1","title":"Issue 1"},{"id":"issue-2","title":"Issue 2"},{"id":"issue-3","title":"Issue 3"}],"pageInfo":{"hasNextPage":true,"endCursor":"eyJpZCI6IjMifQ=="}}}}'
+  recorded_at: Thu, 20 Jun 2025 10:00:00 GMT
+recorded_with: VCR 6.1.0

@@ -1,0 +1,81 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: "<LINEAR_API_URL>"
+    body:
+      encoding: UTF-8
+      string: '{"query":"query($teamId: String!, $first: Int) {\n  team(id: $teamId)
+        {\n    id\n    name\n    issues(first: $first) {\n      nodes {\n        id\n        title\n        state
+        {\n          name\n          type\n        }\n        assignee {\n          name\n        }\n        createdAt\n        completedAt\n      }\n    }\n  }\n}\n","variables":{"teamId":"test-team-id","first":5}}'
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Host:
+      - api.linear.app
+      Authorization:
+      - "<LINEAR_API_TOKEN>"
+      Content-Type:
+      - application/json
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Fri, 20 Jun 2025 10:19:12 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Cf-Ray:
+      - 952a86cb0a835be8-LIS
+      Cf-Cache-Status:
+      - DYNAMIC
+      Cache-Control:
+      - no-store
+      Etag:
+      - W/"10a-ZtU0FeISD9Bh+mI7Korq1LphQ64"
+      Via:
+      - 1.1 google
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      X-Complexity:
+      - '20'
+      X-Ratelimit-Complexity-Limit:
+      - '3000000'
+      X-Ratelimit-Complexity-Remaining:
+      - '2999980'
+      X-Ratelimit-Complexity-Reset:
+      - '1750418352617'
+      X-Ratelimit-Requests-Limit:
+      - '1500'
+      X-Ratelimit-Requests-Remaining:
+      - '1499'
+      X-Ratelimit-Requests-Reset:
+      - '1750418352617'
+      X-Request-Id:
+      - 952a86cb56215be8-LIS
+      Set-Cookie:
+      - __cf_bm=FTa8gonfaIX3AbfhfttevWXKp9Q7BZTuJq9XxVniwLw-1750414752-1.0.1.1-aKG34NPPPKNDtU3nWggKNhR9y7Z.6JBMosB2linmttVrCUFhnoRtKD3VvqaIHz6KR51mVhkM0s5.0EBdHS0m15PDRvsEJUkSdBAq92ae4eE;
+        path=/; expires=Fri, 20-Jun-25 10:49:12 GMT; domain=.linear.app; HttpOnly;
+        Secure; SameSite=None
+      Vary:
+      - Accept-Encoding
+      Server:
+      - cloudflare
+    body:
+      encoding: ASCII-8BIT
+      string: '{"errors":[{"message":"Entity not found: Team","path":["team"],"locations":[{"line":2,"column":3}],"extensions":{"type":"invalid
+        input","code":"INPUT_ERROR","statusCode":400,"userError":true,"userPresentableMessage":"Could
+        not find referenced Team."}}],"data":null}
+
+        '
+  recorded_at: Fri, 20 Jun 2025 10:19:12 GMT
+recorded_with: VCR 6.3.1

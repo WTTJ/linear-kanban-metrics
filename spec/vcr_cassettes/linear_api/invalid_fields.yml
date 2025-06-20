@@ -1,0 +1,31 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.linear.app/graphql
+    body:
+      encoding: UTF-8
+      string: '{"query":"query { issues { nodes { nonexistent_field } } }","variables":{}}'
+    headers:
+      Authorization:
+      - test-token-123
+      Content-Type:
+      - application/json
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '125'
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"message":"Cannot query field \"nonexistent_field\" on type \"Issue\".","locations":[{"line":1,"column":34}],"extensions":{"code":"GRAPHQL_VALIDATION_FAILED"}}]}'
+  recorded_at: Thu, 20 Jun 2025 10:00:00 GMT
+recorded_with: VCR 6.1.0

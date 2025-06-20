@@ -1,0 +1,31 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.linear.app/graphql
+    body:
+      encoding: UTF-8
+      string: '{"query":"query { issues(first: 2) { nodes { id title } } }","variables":{"first":2}}'
+    headers:
+      Authorization:
+      - forbidden-token-403
+      Content-Type:
+      - application/json
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+  response:
+    status:
+      code: 403
+      message: Forbidden
+    headers:
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '75'
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"message":"Forbidden access","extensions":{"code":"FORBIDDEN"}}]}'
+  recorded_at: Thu, 20 Jun 2025 10:00:00 GMT
+recorded_with: VCR 6.1.0
