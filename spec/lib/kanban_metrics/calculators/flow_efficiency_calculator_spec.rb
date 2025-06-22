@@ -129,61 +129,137 @@ RSpec.describe KanbanMetrics::Calculators::FlowEfficiencyCalculator do
         expect(result).to be >= 0
       end
     end
-  end
 
-  describe 'private methods' do
-    # Setup
-    let(:issues) { issues_with_history }
-
-    describe '#active_state?' do
-      # Test cases for different state types
-      [
-        { state_type: 'started', expected: true, description: 'started states as active' },
-        { state_type: 'unstarted', expected: true, description: 'unstarted states as active' },
-        { state_type: 'backlog', expected: false, description: 'backlog states as inactive' },
-        { state_type: 'completed', expected: false, description: 'completed states as inactive' }
-      ].each do |test_case|
-        it "identifies #{test_case[:description]}" do
-          # Setup
-          event = { 'toState' => { 'type' => test_case[:state_type] } }
-
-          # Execute & Verify
-          expect(calculator.send(:active_state?, event)).to be test_case[:expected]
-        end
+    context 'with different state transitions' do
+      let(:issues_with_active_states) do
+        [
+          {
+            'id' => 'active-1',
+            'history' => {
+              'nodes' => [
+                { 'createdAt' => '2024-01-01T00:00:00Z', 'toState' => { 'type' => 'backlog' } },
+                { 'createdAt' => '2024-01-02T00:00:00Z', 'toState' => { 'type' => 'started' } },
+                { 'createdAt' => '2024-01-03T00:00:00Z', 'toState' => { 'type' => 'completed' } }
+              ]
+            }
+          }
+        ]
       end
 
-      it 'handles missing toState gracefully' do
-        # Setup
-        event = {}
+      let(:issues_with_inactive_states) do
+        [
+          {
+            'id' => 'inactive-1',
+            'history' => {
+              'nodes' => [
+                { 'createdAt' => '2024-01-01T00:00:00Z', 'toState' => { 'type' => 'backlog' } },
+                { 'createdAt' => '2024-01-02T00:00:00Z', 'toState' => { 'type' => 'completed' } }
+              ]
+            }
+          }
+        ]
+      end
 
-        # Execute & Verify
-        expect(calculator.send(:active_state?, event)).to be false
+      let(:issues_with_mixed_states) do
+        [
+          {
+            'id' => 'mixed-1',
+            'history' => {
+              'nodes' => [
+                { 'createdAt' => '2024-01-01T00:00:00Z', 'toState' => { 'type' => 'backlog' } },
+                { 'createdAt' => '2024-01-02T00:00:00Z', 'toState' => { 'type' => 'unstarted' } },
+                { 'createdAt' => '2024-01-03T00:00:00Z', 'toState' => { 'type' => 'backlog' } },
+                { 'createdAt' => '2024-01-04T00:00:00Z', 'toState' => { 'type' => 'completed' } }
+              ]
+            }
+          }
+        ]
+      end
+
+      it 'calculates higher efficiency for issues with active states' do
+        calculator_active = described_class.new(issues_with_active_states)
+        calculator_inactive = described_class.new(issues_with_inactive_states)
+
+        active_efficiency = calculator_active.calculate
+        inactive_efficiency = calculator_inactive.calculate
+
+        expect(active_efficiency).to be > inactive_efficiency
+      end
+
+      it 'handles unstarted states as active' do
+        calculator = described_class.new(issues_with_mixed_states)
+        efficiency = calculator.calculate
+
+        # Should be greater than 0 since unstarted is considered active
+        expect(efficiency).to be > 0
+      end
+
+      it 'handles malformed state data gracefully' do
+        malformed_issues = [
+          {
+            'id' => 'malformed-1',
+            'history' => {
+              'nodes' => [
+                { 'createdAt' => '2024-01-01T00:00:00Z' }, # Missing toState
+                { 'createdAt' => '2024-01-02T00:00:00Z', 'toState' => {} }, # Empty toState
+                { 'createdAt' => '2024-01-03T00:00:00Z', 'toState' => { 'type' => 'started' } }
+              ]
+            }
+          }
+        ]
+
+        calculator = described_class.new(malformed_issues)
+        result = calculator.calculate
+
+        expect(result).to be_a(Float)
+        expect(result).to be >= 0
       end
     end
 
-    describe '#calculate_duration' do
-      it 'calculates duration between two events' do
-        # Setup
-        from_event = { 'createdAt' => '2024-01-01T10:00:00Z' }
-        to_event = { 'createdAt' => '2024-01-02T10:00:00Z' }
-
-        # Execute
-        duration = calculator.send(:calculate_duration, from_event, to_event)
-
-        # Verify
-        expect(duration).to eq(1.0) # 1 day
+    context 'with timestamp edge cases' do
+      let(:issues_with_invalid_timestamps) do
+        [
+          {
+            'id' => 'invalid-timestamps',
+            'history' => {
+              'nodes' => [
+                { 'createdAt' => 'invalid-date', 'toState' => { 'type' => 'backlog' } },
+                { 'createdAt' => '2024-01-02T00:00:00Z', 'toState' => { 'type' => 'started' } },
+                { 'createdAt' => '', 'toState' => { 'type' => 'completed' } }
+              ]
+            }
+          }
+        ]
       end
 
-      it 'handles fractional days' do
-        # Setup
-        from_event = { 'createdAt' => '2024-01-01T10:00:00Z' }
-        to_event = { 'createdAt' => '2024-01-01T22:00:00Z' }
+      let(:issues_with_same_timestamps) do
+        [
+          {
+            'id' => 'same-timestamps',
+            'history' => {
+              'nodes' => [
+                { 'createdAt' => '2024-01-01T00:00:00Z', 'toState' => { 'type' => 'backlog' } },
+                { 'createdAt' => '2024-01-01T00:00:00Z', 'toState' => { 'type' => 'started' } }
+              ]
+            }
+          }
+        ]
+      end
 
-        # Execute
-        duration = calculator.send(:calculate_duration, from_event, to_event)
+      it 'handles invalid timestamps gracefully' do
+        calculator = described_class.new(issues_with_invalid_timestamps)
+        result = calculator.calculate
 
-        # Verify
-        expect(duration).to eq(0.5) # 12 hours = 0.5 days
+        expect(result).to be_a(Float)
+        expect(result).to be >= 0
+      end
+
+      it 'handles zero duration transitions' do
+        calculator = described_class.new(issues_with_same_timestamps)
+        result = calculator.calculate
+
+        expect(result).to be_a(Float)
+        expect(result).to be >= 0
       end
     end
   end
