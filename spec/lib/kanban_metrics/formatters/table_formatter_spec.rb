@@ -76,6 +76,55 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
     ]
   end
 
+  describe '.print_all' do
+    subject(:print_all) { described_class.print_all(metrics, team_metrics: team_metrics, issues: sample_issues) }
+
+    it 'prints all sections without errors' do
+      # Execute & Verify
+      expect { print_all }.not_to raise_error
+    end
+
+    it 'includes summary, cycle time, lead time, throughput, team metrics, individual tickets, and KPI definitions' do
+      # Execute
+      output = capture_stdout { print_all }
+
+      # Verify
+      aggregate_failures 'all sections content' do
+        expect(output).to include('📈 SUMMARY')
+        expect(output).to include('⏱️  CYCLE TIME')
+        expect(output).to include('📏 LEAD TIME')
+        expect(output).to include('🚀 THROUGHPUT')
+        expect(output).to include('👥 TEAM METRICS')
+        expect(output).to include('🎫 INDIVIDUAL TICKET DETAILS')
+        expect(output).to include('📚 KPI DEFINITIONS')
+      end
+    end
+
+    context 'without team metrics' do
+      subject(:print_all) { described_class.print_all(metrics, team_metrics: nil, issues: sample_issues) }
+
+      it 'skips team metrics section' do
+        # Execute
+        output = capture_stdout { print_all }
+
+        # Verify
+        expect(output).not_to include('👥 TEAM METRICS')
+      end
+    end
+
+    context 'without issues' do
+      subject(:print_all) { described_class.print_all(metrics, team_metrics: team_metrics, issues: nil) }
+
+      it 'skips individual tickets section' do
+        # Execute
+        output = capture_stdout { print_all }
+
+        # Verify
+        expect(output).not_to include('🎫 INDIVIDUAL TICKET DETAILS')
+      end
+    end
+  end
+
   describe '#initialize' do
     context 'with metrics only' do
       # Setup
@@ -335,96 +384,142 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
     end
   end
 
-  describe 'private methods' do
-    # Setup
+  describe '#print_individual_tickets' do
+    subject(:print_individual_tickets) { formatter.print_individual_tickets }
+
+    context 'with issues available' do
+      # Setup
+      let(:metrics_param) { metrics }
+      let(:team_metrics_param) { nil }
+      let(:issues_param) { sample_issues }
+
+      it 'prints individual tickets without errors' do
+        # Execute & Verify
+        expect { print_individual_tickets }.not_to raise_error
+      end
+
+      it 'outputs the individual tickets section header' do
+        # Execute & Verify
+        expect { print_individual_tickets }.to output(/🎫 INDIVIDUAL TICKET DETAILS/).to_stdout
+      end
+
+      it 'includes ticket information' do
+        # Execute
+        output = capture_stdout { print_individual_tickets }
+
+        # Verify
+        aggregate_failures 'individual tickets content' do
+          expect(output).to include('PROJ-123')
+          expect(output).to include('PROJ-124')
+          expect(output).to include('Implement user authenticati') # Truncated title
+          expect(output).to include('Backend Team')
+          expect(output).to include('Frontend Team')
+          expect(output).to include('Done')
+          expect(output).to include('In Progress')
+        end
+      end
+    end
+
+    context 'without issues' do
+      # Setup
+      let(:metrics_param) { metrics }
+      let(:team_metrics_param) { nil }
+      let(:issues_param) { nil }
+
+      it 'does not print anything when no issues available' do
+        # Execute
+        output = capture_stdout { print_individual_tickets }
+
+        # Verify
+        expect(output).to be_empty
+      end
+    end
+  end
+
+  describe 'throughput formatting bug fix' do
     let(:metrics_param) { metrics }
-    let(:team_metrics_param) { team_metrics }
+    let(:team_metrics_param) do
+      {
+        'Engineering Managers' => {
+          total_issues: 35,
+          completed_issues: 0,
+          in_progress_issues: 0,
+          backlog_issues: 35,
+          cycle_time: { average: 0.0, median: 0.0 },
+          lead_time: { average: 0.0, median: 0.0 },
+          throughput: { weekly_avg: 0.0, total_completed: 0 } # Hash format instead of number
+        }
+      }
+    end
     let(:issues_param) { nil }
 
-    describe '#build_summary_table' do
-      subject(:build_summary_table) { formatter.send(:build_summary_table) }
+    it 'properly formats hash-based throughput values instead of displaying raw JSON' do
+      # Execute
+      output = capture_stdout { formatter.print_team_metrics }
 
-      it 'creates a Terminal::Table instance' do
-        # Execute
-        result = build_summary_table
-
-        # Verify
-        expect(result).to be_a(Terminal::Table)
+      # Verify - should show "0 completed" instead of the raw hash
+      aggregate_failures 'throughput formatting' do
+        expect(output).to include('0 completed')
+        expect(output).not_to include('{:weekly_avg=>0.0, :total_completed=>0}')
+        expect(output).not_to include('weekly_avg')
+        expect(output).not_to include('total_completed')
       end
+    end
+  end
 
-      it 'includes correct headings' do
-        # Execute
-        result = build_summary_table
-        headings = result.headings.first.cells.map(&:value)
+  describe 'error handling' do
+    let(:metrics_param) { metrics }
+    let(:team_metrics_param) { nil }
+    let(:issues_param) { nil }
 
-        # Verify
-        expect(headings).to eq(%w[Metric Value Description])
+    context 'with invalid metrics data' do
+      let(:metrics_param) { nil }
+
+      it 'raises ArgumentError on initialization' do
+        # Execute & Verify
+        expect { formatter }.to raise_error(ArgumentError, 'Metrics must be a non-empty Hash')
       end
     end
 
-    describe '#build_cycle_time_table' do
-      subject(:build_cycle_time_table) { formatter.send(:build_cycle_time_table) }
+    context 'with empty metrics data' do
+      let(:metrics_param) { {} }
 
-      it 'creates a Terminal::Table instance' do
-        # Execute
-        result = build_cycle_time_table
-
-        # Verify
-        expect(result).to be_a(Terminal::Table)
-      end
-
-      it 'includes correct headings' do
-        # Execute
-        result = build_cycle_time_table
-        headings = result.headings.first.cells.map(&:value)
-
-        # Verify
-        expect(headings).to eq(%w[Metric Days Description])
+      it 'raises ArgumentError on initialization' do
+        # Execute & Verify
+        expect { formatter }.to raise_error(ArgumentError, 'Metrics must be a non-empty Hash')
       end
     end
 
-    describe '#build_lead_time_table' do
-      subject(:build_lead_time_table) { formatter.send(:build_lead_time_table) }
+    context 'with missing nested data' do
+      let(:metrics_param) do
+        {
+          total_issues: 10
+          # Missing cycle_time, lead_time, throughput, etc.
+        }
+      end
 
-      it 'creates a Terminal::Table instance' do
+      it 'handles missing data gracefully in summary' do
         # Execute
-        result = build_lead_time_table
+        output = capture_stdout { formatter.print_summary }
 
-        # Verify
-        expect(result).to be_a(Terminal::Table)
+        # Verify - should still work but show N/A for missing values
+        expect(output).to include('📈 SUMMARY')
+        expect(output).to include('10') # total_issues
       end
 
-      it 'includes correct headings' do
-        # Execute
-        result = build_lead_time_table
-        headings = result.headings.first.cells.map(&:value)
-
-        # Verify
-        expect(headings).to eq(%w[Metric Days Description])
-      end
-    end
-
-    describe '#team_metrics_available?' do
-      subject(:team_metrics_available) { formatter.send(:team_metrics_available?) }
-
-      context 'with team metrics' do
-        # Setup
-        let(:team_metrics_param) { team_metrics }
-
-        it 'returns true when team metrics are present' do
-          # Execute & Verify
-          expect(team_metrics_available).to be true
-        end
+      it 'handles missing data gracefully in cycle time' do
+        # Execute & Verify - should not raise error
+        expect { formatter.print_cycle_time }.not_to raise_error
       end
 
-      context 'without team metrics' do
-        # Setup
-        let(:team_metrics_param) { nil }
+      it 'handles missing data gracefully in lead time' do
+        # Execute & Verify - should not raise error
+        expect { formatter.print_lead_time }.not_to raise_error
+      end
 
-        it 'returns false when team metrics are nil' do
-          # Execute & Verify
-          expect(team_metrics_available).to be false
-        end
+      it 'handles missing data gracefully in throughput' do
+        # Execute & Verify - should not raise error
+        expect { formatter.print_throughput }.not_to raise_error
       end
     end
   end
