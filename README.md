@@ -36,6 +36,7 @@ Run the script to collect metrics:
 - `--no-cache` - Disable API response caching (fetch fresh data)
 - `--team-metrics` - Include team-based metrics breakdown (disabled by default)
 - `--include-archived` - Include archived tickets in the analysis (disabled by default)
+- `--ticket-details` - Include individual ticket details in CSV export (disabled by default)
 
 ### Examples
 
@@ -57,6 +58,12 @@ Run the script to collect metrics:
 
 # Output as CSV with team metrics
 ./bin/kanban_metrics --format csv --team-metrics
+
+# Output as CSV with individual ticket details
+./bin/kanban_metrics --format csv --ticket-details
+
+# Output as CSV with team metrics and ticket details
+./bin/kanban_metrics --format csv --team-metrics --ticket-details
 
 # Include archived tickets in the analysis
 ./bin/kanban_metrics --include-archived
@@ -246,7 +253,7 @@ Backend Team,8,6,7.2,6
 Frontend Team,7,4,10.1,4
 ```
 
-### 3. Individual Tickets
+### 3. Individual Tickets (with `--ticket-details`)
 **NEW**: Detailed export of every ticket with calculated metrics:
 ```csv
 ID,Identifier,Title,State,Team,Assignee,Priority,Cycle Time (days),Lead Time (days)
@@ -254,6 +261,8 @@ abc123,PROJ-123,User authentication,Done,Backend Team,John Doe,1,6.25,7.29
 def456,PROJ-124,Login bug fix,Done,Frontend Team,Jane Smith,0,1.1,1.9
 ...
 ```
+
+**Note**: Individual tickets are only included when using the `--ticket-details` flag. Without this flag, CSV export contains only aggregated metrics.
 
 This individual tickets section includes:
 - All Linear ticket fields (ID, identifier, title, state, team, assignee, priority, estimate)

@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 # Demo script to show CSV export with individual tickets
+# Note: In the actual application, use --ticket-details flag to include individual tickets:
+# ./bin/kanban_metrics --format csv --ticket-details
 require_relative '../lib/kanban_metrics'
 
 # Sample metrics data

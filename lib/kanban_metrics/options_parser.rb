@@ -44,6 +44,7 @@ module KanbanMetrics
       opts.on('--timeseries', 'Include timeseries analysis') { options[:timeseries] = true }
       opts.on('--timeline ISSUE_ID', 'Show detailed timeline for specific issue') { |id| options[:timeline] = id }
       opts.on('--include-archived', 'Include archived tickets in the analysis') { options[:include_archived] = true }
+      opts.on('--ticket-details', 'Include individual ticket details in CSV export') { options[:ticket_details] = true }
     end
 
     private_class_method def self.add_help_option(opts)
@@ -74,6 +75,7 @@ module KanbanMetrics
       options[:team_metrics] = false if options[:team_metrics].nil?
       options[:timeseries] = false if options[:timeseries].nil?
       options[:include_archived] = false if options[:include_archived].nil?
+      options[:ticket_details] = false if options[:ticket_details].nil?
     end
 
     private_class_method def self.validate_page_size(options)

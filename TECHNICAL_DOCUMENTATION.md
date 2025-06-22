@@ -1148,6 +1148,7 @@ module KanbanMetrics
 - `--timeseries`: Include timeseries analysis
 - `--timeline ISSUE_ID`: Show detailed timeline for specific issue
 - `--include-archived`: Include archived tickets in analysis
+- `--ticket-details`: Include individual ticket details in CSV export
 - `--help`: Show help message
 
 **Design Rationale**: Centralizes all CLI option handling and validation, providing a clean interface between command-line input and application logic.

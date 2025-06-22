@@ -147,6 +147,20 @@ RSpec.describe KanbanMetrics::OptionsParser do
           expect(result[:include_archived]).to be true
         end
       end
+
+      context 'ticket-details flag' do
+        let(:args) { ['--ticket-details'] }
+
+        it 'parses ticket-details flag correctly' do
+          # Setup: args defined above
+
+          # Execute
+          result = parse_options
+
+          # Verify
+          expect(result[:ticket_details]).to be true
+        end
+      end
     end
 
     context 'with complex option combinations' do
