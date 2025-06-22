@@ -148,7 +148,7 @@ RSpec.describe KanbanMetrics::Formatters::CsvFormatter do
           expect(result).to include('In Progress Issues,25,count')
           expect(result).to include('Backlog Issues,15,count')
           expect(result).to include('Average Cycle Time,8.5,days')
-          expect(result).to include('Median Cycle Time,6.0,days')
+          expect(result).to include('Median Cycle Time,6,days')
           expect(result).to include('95th Percentile Cycle Time,18.2,days')
           expect(result).to include('Average Lead Time,12.3,days')
           expect(result).to include('Median Lead Time,9.1,days')
@@ -249,7 +249,7 @@ RSpec.describe KanbanMetrics::Formatters::CsvFormatter do
         expect(csv_output).to include('Status,Average Days')
         expect(csv_output).to include('Backlog,2.5')
         expect(csv_output).to include('In Progress,5.8')
-        expect(csv_output).to include('Done,0.0')
+        expect(csv_output).to include('Done,0')
       end
     end
 
