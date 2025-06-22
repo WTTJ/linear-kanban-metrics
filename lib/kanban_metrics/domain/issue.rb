@@ -14,7 +14,7 @@ module KanbanMetrics
     # - Performance optimizations with memoization
     class Issue
       # Valid Linear state types for validation
-      VALID_STATE_TYPES = %w[backlog unstarted started completed canceled].freeze
+      VALID_STATE_TYPES = %w[backlog unstarted started completed canceled triage].freeze
 
       attr_reader :raw_data
 
