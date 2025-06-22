@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
-require_relative '../../../lib/kanban_metrics/application_runner'
 
 RSpec.describe KanbanMetrics::ApplicationRunner do
   # Test Data Setup

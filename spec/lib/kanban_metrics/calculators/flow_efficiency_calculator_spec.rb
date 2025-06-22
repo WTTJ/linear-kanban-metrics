@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
-require_relative '../../../../lib/kanban_metrics/calculators/flow_efficiency_calculator'
 
 RSpec.describe KanbanMetrics::Calculators::FlowEfficiencyCalculator do
   # Test Data Setup

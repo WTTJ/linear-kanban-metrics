@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
-require_relative '../../../../lib/kanban_metrics/linear/query_builder'
 
 RSpec.describe KanbanMetrics::Linear::QueryBuilder do
   let(:query_builder) { described_class.new }

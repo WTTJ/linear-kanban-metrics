@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
-require_relative '../../lib/kanban_metrics'
 
 RSpec.describe KanbanMetrics do
   describe 'module structure' do

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
-require_relative '../../../../lib/kanban_metrics/reports/timeline_display'
 
 RSpec.describe KanbanMetrics::Reports::TimelineDisplay do
   subject(:timeline_display) { described_class.new(issues) }

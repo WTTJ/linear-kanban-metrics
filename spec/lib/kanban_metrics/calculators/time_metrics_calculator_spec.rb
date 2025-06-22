@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
-require_relative '../../../../lib/kanban_metrics/calculators/time_metrics_calculator'
 
 RSpec.describe KanbanMetrics::Calculators::TimeMetricsCalculator do
   # Test Data Setup

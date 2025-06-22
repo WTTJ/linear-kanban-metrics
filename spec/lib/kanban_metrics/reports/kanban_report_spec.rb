@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
-require_relative '../../../../lib/kanban_metrics/reports/kanban_report'
 
 RSpec.describe KanbanMetrics::Reports::KanbanReport do
   subject(:report) { described_class.new(metrics, team_metrics, timeseries_data) }

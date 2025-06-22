@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
-require_relative '../../../../lib/kanban_metrics/timeseries/ticket_timeseries'
 
 RSpec.describe KanbanMetrics::Timeseries::TicketTimeseries do
   subject(:timeseries) { described_class.new(issues) }

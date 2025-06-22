@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
-require_relative '../../../../lib/kanban_metrics/timeseries/timeline_builder'
 
 RSpec.describe KanbanMetrics::Timeseries::TimelineBuilder do
   subject(:timeline_builder) { described_class.new }
