@@ -41,7 +41,7 @@ module KanbanMetrics
       team_metrics = options[:team_metrics] ? calculator.team_metrics : nil
       timeseries = options[:timeseries] ? Timeseries::TicketTimeseries.new(issues) : nil
 
-      Reports::KanbanReport.new(metrics, team_metrics, timeseries).display(options[:format] || 'table')
+      Reports::KanbanReport.new(metrics, team_metrics, timeseries, issues).display(options[:format] || 'table')
     end
   end
 

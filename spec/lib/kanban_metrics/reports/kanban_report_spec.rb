@@ -105,7 +105,7 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
       it 'uses CsvFormatter and outputs CSV to stdout' do
         # Given: A report with all data and a mocked CSV formatter
         allow(KanbanMetrics::Formatters::CsvFormatter).to receive(:new)
-          .with(sample_metrics, sample_team_metrics, sample_timeseries)
+          .with(sample_metrics, sample_team_metrics, sample_timeseries, nil)
           .and_return(mock_csv_formatter)
         allow(mock_csv_formatter).to receive(:generate).and_return(expected_csv)
 
@@ -113,6 +113,23 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
         output = capture_stdout { report.display('csv') }
 
         # Then: Should output formatted CSV
+        expect(output).to eq("#{expected_csv}\n")
+      end
+
+      it 'passes issues to CsvFormatter when provided' do
+        # Given: A report with all data including issues
+        issues_data = [{ 'id' => 'test-issue', 'title' => 'Test Issue' }]
+        report_with_issues = described_class.new(sample_metrics, sample_team_metrics, sample_timeseries, issues_data)
+
+        allow(KanbanMetrics::Formatters::CsvFormatter).to receive(:new)
+          .with(sample_metrics, sample_team_metrics, sample_timeseries, issues_data)
+          .and_return(mock_csv_formatter)
+        allow(mock_csv_formatter).to receive(:generate).and_return(expected_csv)
+
+        # When: Displaying in CSV format
+        output = capture_stdout { report_with_issues.display('csv') }
+
+        # Then: Should pass issues to formatter and output CSV
         expect(output).to eq("#{expected_csv}\n")
       end
     end

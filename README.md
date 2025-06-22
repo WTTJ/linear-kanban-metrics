@@ -223,8 +223,47 @@ This helps identify:
 - ⚡ **Process Issues**: Unusual transitions or delays
 - 📈 **Trend Analysis**: How activity changes over time
 
-## Requirements
+## CSV Export Features
 
-- Ruby 3.0+
-- Linear API access token
-- Internet connection
+When using `--format csv`, the output includes three comprehensive sections:
+
+### 1. Overall Metrics
+Standard project-level metrics in CSV format:
+```csv
+Metric,Value,Unit
+Total Issues,15,count
+Completed Issues,10,count
+Average Cycle Time,8.5,days
+Lead Time,12.3,days
+...
+```
+
+### 2. Team Metrics (with `--team-metrics`)
+Per-team breakdown with all key metrics:
+```csv
+Team,Total Issues,Completed Issues,Avg Cycle Time,Throughput
+Backend Team,8,6,7.2,6
+Frontend Team,7,4,10.1,4
+```
+
+### 3. Individual Tickets
+**NEW**: Detailed export of every ticket with calculated metrics:
+```csv
+ID,Identifier,Title,State,Team,Assignee,Priority,Cycle Time (days),Lead Time (days)
+abc123,PROJ-123,User authentication,Done,Backend Team,John Doe,1,6.25,7.29
+def456,PROJ-124,Login bug fix,Done,Frontend Team,Jane Smith,0,1.1,1.9
+...
+```
+
+This individual tickets section includes:
+- All Linear ticket fields (ID, identifier, title, state, team, assignee, priority, estimate)
+- Timestamps (created, updated, started, completed, archived)
+- **Calculated cycle time** (started → completed) 
+- **Calculated lead time** (created → completed)
+- Proper handling of incomplete tickets (empty time fields for in-progress/backlog items)
+
+Perfect for:
+- 📊 **Data analysis** in Excel, Google Sheets, or BI tools
+- 📈 **Trend analysis** across individual tickets over time
+- 🔍 **Outlier detection** for tickets with unusual cycle/lead times
+- 📋 **Detailed reporting** with ticket-level granularity

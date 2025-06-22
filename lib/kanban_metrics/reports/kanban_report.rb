@@ -4,10 +4,11 @@ module KanbanMetrics
   module Reports
     # Main report coordination class
     class KanbanReport
-      def initialize(metrics, team_metrics = nil, timeseries = nil)
+      def initialize(metrics, team_metrics = nil, timeseries = nil, issues = nil)
         @metrics = metrics
         @team_metrics = team_metrics
         @timeseries = timeseries
+        @issues = issues
       end
 
       def display(format = 'table')
@@ -15,7 +16,7 @@ module KanbanMetrics
         when 'json'
           puts Formatters::JsonFormatter.new(@metrics, @team_metrics, @timeseries).generate
         when 'csv'
-          puts Formatters::CsvFormatter.new(@metrics, @team_metrics, @timeseries).generate
+          puts Formatters::CsvFormatter.new(@metrics, @team_metrics, @timeseries, @issues).generate
         else
           display_table_format
         end

@@ -6,10 +6,11 @@ module KanbanMetrics
   module Formatters
     # Handles CSV formatting
     class CsvFormatter
-      def initialize(metrics, team_metrics = nil, timeseries = nil)
+      def initialize(metrics, team_metrics = nil, timeseries = nil, issues = nil)
         @metrics = metrics
         @team_metrics = team_metrics
         @timeseries = timeseries
+        @issues = issues
       end
 
       def generate
@@ -17,6 +18,7 @@ module KanbanMetrics
           add_overall_metrics(csv)
           add_team_metrics(csv) if @team_metrics
           add_timeseries_data(csv) if @timeseries
+          add_individual_tickets(csv) if @issues && !@issues.empty?
         end
       end
 
@@ -84,6 +86,50 @@ module KanbanMetrics
         @timeseries.average_time_in_status.each do |status, days|
           csv << [status, days]
         end
+      end
+
+      def add_individual_tickets(csv)
+        csv << []
+        csv << ['INDIVIDUAL TICKETS']
+        csv << ['ID', 'Identifier', 'Title', 'State', 'State Type', 'Team', 'Assignee', 'Priority', 'Estimate', 
+                'Created At', 'Updated At', 'Started At', 'Completed At', 'Archived At', 'Cycle Time (days)', 'Lead Time (days)']
+
+        @issues.each do |issue|
+          csv << [
+            issue['id'],
+            issue['identifier'],
+            issue['title'],
+            issue.dig('state', 'name'),
+            issue.dig('state', 'type'),
+            issue.dig('team', 'name'),
+            issue.dig('assignee', 'name'),
+            issue['priority'],
+            issue['estimate'],
+            issue['createdAt'],
+            issue['updatedAt'],
+            issue['startedAt'],
+            issue['completedAt'],
+            issue['archivedAt'],
+            calculate_cycle_time(issue),
+            calculate_lead_time(issue)
+          ]
+        end
+      end
+
+      def calculate_cycle_time(issue)
+        return nil unless issue['startedAt'] && issue['completedAt']
+        
+        start_time = DateTime.parse(issue['startedAt'])
+        end_time = DateTime.parse(issue['completedAt'])
+        ((end_time - start_time).to_f).round(2)
+      end
+
+      def calculate_lead_time(issue)
+        return nil unless issue['createdAt'] && issue['completedAt']
+        
+        start_time = DateTime.parse(issue['createdAt'])
+        end_time = DateTime.parse(issue['completedAt'])
+        ((end_time - start_time).to_f).round(2)
       end
     end
   end

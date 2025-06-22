@@ -907,13 +907,14 @@ module KanbanMetrics
 ```
 
 #### Constructor
-- **`initialize(metrics, team_metrics = nil, timeseries = nil)`**: Takes all available data types
+- **`initialize(metrics, team_metrics = nil, timeseries = nil, issues = nil)`**: Takes all available data types including raw issues
 
 #### Public Methods
 - **`generate`**: Creates complete CSV output string
   - Includes overall metrics
   - Adds team breakdown if available
   - Includes timeseries data if available
+  - **NEW**: Adds individual tickets section if issues provided
 
 #### Private Methods
 - **`add_overall_metrics(csv)`**: Adds main metrics to CSV
@@ -921,8 +922,11 @@ module KanbanMetrics
 - **`add_timeseries_data(csv)`**: Adds timeseries analysis section
 - **`add_status_transitions(csv)`**: Adds state transition data
 - **`add_time_in_status(csv)`**: Adds time-in-status analysis
+- **`add_individual_tickets(csv)`**: **NEW**: Adds individual ticket export with calculated times
+- **`calculate_cycle_time(issue)`**: **NEW**: Calculates cycle time (started → completed)
+- **`calculate_lead_time(issue)`**: **NEW**: Calculates lead time (created → completed)
 
-**Design Rationale**: Encapsulates CSV-specific formatting logic, making it easy to modify CSV structure while ensuring data integrity for analysis tools.
+**Design Rationale**: Encapsulates CSV-specific formatting logic, making it easy to modify CSV structure while ensuring data integrity for analysis tools. The addition of individual ticket export enables detailed data analysis at the ticket level, supporting trend analysis and outlier detection.
 
 ---
 
