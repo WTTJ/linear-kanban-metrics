@@ -577,16 +577,24 @@ module KanbanMetrics
         'N/A'
       end
 
-      # Truncate title for table display
+      # Truncate and sanitize title for table display
       #
-      # @param title [String, nil] Title to truncate
+      # @param title [String, nil] Title to truncate and sanitize
       # @param max_length [Integer] Maximum length
-      # @return [String] Truncated title
+      # @return [String] Sanitized and truncated title
       def truncate_title(title, max_length = 30)
         return 'N/A' if title.nil? || title.empty?
-        return title if title.length <= max_length
 
-        "#{title[0, max_length - 3]}..."
+        # Sanitize: replace newlines with spaces, remove other problematic characters
+        sanitized = title.to_s
+                         .gsub(/\r?\n/, ' ') # Replace newlines with spaces
+                         .tr("\t", ' ') # Replace tabs with spaces
+                         .gsub(/\s+/, ' ')            # Collapse multiple spaces
+                         .strip                       # Remove leading/trailing whitespace
+
+        return sanitized if sanitized.length <= max_length
+
+        "#{sanitized[0, max_length - 3]}..."
       end
 
       # Logging utilities

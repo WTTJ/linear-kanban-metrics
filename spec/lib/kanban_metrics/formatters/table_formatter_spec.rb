@@ -523,4 +523,98 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
       end
     end
   end
+
+  describe 'title sanitization for individual tickets' do
+    let(:metrics_param) { metrics }
+    let(:team_metrics_param) { nil }
+    let(:issues_with_problematic_titles) do
+      [
+        {
+          'identifier' => 'ROI-184',
+          'title' => "Hello la team, \n Je vous éc...",
+          'state' => { 'name' => 'Done' },
+          'createdAt' => '2024-01-01T10:00:00Z',
+          'startedAt' => '2024-01-02T14:00:00Z',
+          'completedAt' => '2024-01-05T16:00:00Z',
+          'team' => { 'name' => 'Backend Team' }
+        },
+        {
+          'identifier' => 'ONB-571',
+          'title' => "Pour le tracking code\n '?pr...",
+          'state' => { 'name' => 'In Progress' },
+          'createdAt' => '2024-01-03T09:00:00Z',
+          'startedAt' => '2024-01-04T11:00:00Z',
+          'completedAt' => nil,
+          'team' => { 'name' => 'Frontend Team' }
+        },
+        {
+          'identifier' => 'TEST-123',
+          'title' => "Multi\tTab\r\nAnd\n\nDouble\nNewline\tTest",
+          'state' => { 'name' => 'Todo' },
+          'createdAt' => '2024-01-06T10:00:00Z',
+          'startedAt' => nil,
+          'completedAt' => nil,
+          'team' => { 'name' => 'QA Team' }
+        }
+      ]
+    end
+    let(:issues_param) { issues_with_problematic_titles }
+
+    it 'sanitizes titles with newlines and special characters for proper table formatting' do
+      # Execute
+      output = capture_stdout { formatter.print_individual_tickets }
+
+      # Verify - titles should be sanitized
+      aggregate_failures 'title sanitization' do
+        # Check that the original newlines are removed/replaced with spaces
+        expect(output).not_to include("Hello la team, \n Je vous éc")
+        expect(output).not_to include("Pour le tracking code\n '?pr")
+        expect(output).not_to include("Multi\tTab\r\nAnd\n\nDouble")
+
+        # Check that sanitized versions appear (spaces instead of newlines)
+        expect(output).to include('Hello la team, Je vous éc')
+        expect(output).to include("Pour le tracking code '?pr")
+        expect(output).to include('Multi Tab And Double Newlin') # Truncated due to length
+
+        # Verify table structure is maintained (should see proper identifiers)
+        expect(output).to include('ROI-184')
+        expect(output).to include('ONB-571')
+        expect(output).to include('TEST-123')
+
+        # Verify no line breaks break the table format
+        lines = output.split("\n")
+        table_lines = lines.select { |line| line.include?('ROI-184') || line.include?('ONB-571') || line.include?('TEST-123') }
+        expect(table_lines.length).to eq(3) # Each ticket should be on exactly one line
+      end
+    end
+
+    it 'handles extremely long titles with newlines correctly' do
+      long_title_issue = [{
+        'identifier' => 'LONG-1',
+        'title' => "This is a very long title\nwith newlines\nthat would definitely\nexceed the normal\ntitle length limit\nand cause formatting issues\nif not handled properly",
+        'state' => { 'name' => 'Done' },
+        'createdAt' => '2024-01-01T10:00:00Z',
+        'team' => { 'name' => 'Test Team' }
+      }]
+
+      formatter_with_long_title = described_class.new(metrics, nil, long_title_issue)
+
+      # Execute
+      output = capture_stdout { formatter_with_long_title.print_individual_tickets }
+
+      # Verify
+      aggregate_failures 'long title handling' do
+        expect(output).to include('LONG-1')
+        expect(output).to include('This is a very long title w...') # Should be truncated
+        expect(output).not_to include("\nthat would") # No raw newlines should appear in the title area
+
+        # Should be properly truncated and sanitized
+        lines = output.split("\n")
+        table_line = lines.find { |line| line.include?('LONG-1') }
+        expect(table_line).not_to be_nil
+        # The line should not contain the full original title
+        expect(table_line).not_to include('that would definitely')
+      end
+    end
+  end
 end
