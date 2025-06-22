@@ -5,7 +5,7 @@ require_relative '../../../../lib/kanban_metrics/formatters/table_formatter'
 
 RSpec.describe KanbanMetrics::Formatters::TableFormatter do
   # Test Data Setup
-  subject(:formatter) { described_class.new(metrics_param, team_metrics_param) }
+  subject(:formatter) { described_class.new(metrics_param, team_metrics_param, issues_param) }
 
   let(:metrics) do
     {
@@ -54,11 +54,35 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
     }
   end
 
+  let(:sample_issues) do
+    [
+      {
+        'identifier' => 'PROJ-123',
+        'title' => 'Implement user authentication system',
+        'state' => { 'name' => 'Done' },
+        'createdAt' => '2024-01-01T10:00:00Z',
+        'startedAt' => '2024-01-02T14:00:00Z',
+        'completedAt' => '2024-01-05T16:00:00Z',
+        'team' => { 'name' => 'Backend Team' }
+      },
+      {
+        'identifier' => 'PROJ-124',
+        'title' => 'Fix login page styling and layout issues',
+        'state' => { 'name' => 'In Progress' },
+        'createdAt' => '2024-01-03T09:00:00Z',
+        'startedAt' => '2024-01-04T11:00:00Z',
+        'completedAt' => nil,
+        'team' => { 'name' => 'Frontend Team' }
+      }
+    ]
+  end
+
   describe '#initialize' do
     context 'with metrics only' do
       # Setup
       let(:metrics_param) { metrics }
       let(:team_metrics_param) { nil }
+      let(:issues_param) { nil }
 
       it 'creates formatter instance with metrics only' do
         # Execute & Verify
@@ -70,6 +94,7 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
       # Setup
       let(:metrics_param) { metrics }
       let(:team_metrics_param) { team_metrics }
+      let(:issues_param) { nil }
 
       it 'creates formatter instance with team metrics' do
         # Execute & Verify
@@ -106,6 +131,7 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
     # Setup
     let(:metrics_param) { metrics }
     let(:team_metrics_param) { nil }
+    let(:issues_param) { nil }
 
     it 'prints summary without errors' do
       # Execute & Verify
@@ -143,6 +169,7 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
     # Setup
     let(:metrics_param) { metrics }
     let(:team_metrics_param) { nil }
+    let(:issues_param) { nil }
 
     it 'prints cycle time without errors' do
       # Execute & Verify
@@ -176,6 +203,7 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
     # Setup
     let(:metrics_param) { metrics }
     let(:team_metrics_param) { nil }
+    let(:issues_param) { nil }
 
     it 'prints lead time without errors' do
       # Execute & Verify
@@ -209,6 +237,7 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
     # Setup
     let(:metrics_param) { metrics }
     let(:team_metrics_param) { nil }
+    let(:issues_param) { nil }
 
     it 'prints throughput without errors' do
       # Execute & Verify
@@ -239,6 +268,7 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
       # Setup
       let(:metrics_param) { metrics }
       let(:team_metrics_param) { team_metrics }
+      let(:issues_param) { nil }
 
       it 'prints team metrics without errors' do
         # Execute & Verify
@@ -261,6 +291,7 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
       # Setup
       let(:metrics_param) { metrics }
       let(:team_metrics_param) { nil }
+      let(:issues_param) { nil }
 
       it 'does not print anything when team metrics not available' do
         # Execute
@@ -278,6 +309,7 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
     # Setup
     let(:metrics_param) { metrics }
     let(:team_metrics_param) { nil }
+    let(:issues_param) { nil }
 
     it 'prints KPI definitions without errors' do
       # Execute & Verify
@@ -308,6 +340,7 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
     # Setup
     let(:metrics_param) { metrics }
     let(:team_metrics_param) { team_metrics }
+    let(:issues_param) { nil }
 
     describe '#build_summary_table' do
       subject(:build_summary_table) { formatter.send(:build_summary_table) }

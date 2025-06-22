@@ -6,7 +6,7 @@ require_relative '../../../../lib/kanban_metrics/formatters/json_formatter'
 RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
   # === TEST DATA SETUP ===
   # Named Subject
-  subject(:formatter) { described_class.new(metrics, team_metrics, timeseries_data) }
+  subject(:formatter) { described_class.new(metrics, team_metrics, timeseries_data, issues_data) }
 
   let(:metrics) do
     {
@@ -62,10 +62,34 @@ RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
                     daily_status_counts: { Date.today => { 'completed' => 3, 'started' => 2 } })
   end
 
+  let(:sample_issues) do
+    [
+      {
+        'identifier' => 'PROJ-123',
+        'title' => 'Implement user authentication',
+        'state' => { 'name' => 'Done' },
+        'createdAt' => '2024-01-01T10:00:00Z',
+        'startedAt' => '2024-01-02T14:00:00Z',
+        'completedAt' => '2024-01-05T16:00:00Z',
+        'team' => { 'name' => 'Backend Team' }
+      },
+      {
+        'identifier' => 'PROJ-124',
+        'title' => 'Fix login page styling issues',
+        'state' => { 'name' => 'In Progress' },
+        'createdAt' => '2024-01-03T09:00:00Z',
+        'startedAt' => '2024-01-04T11:00:00Z',
+        'completedAt' => nil,
+        'team' => { 'name' => 'Frontend Team' }
+      }
+    ]
+  end
+
   describe '#initialize' do
     context 'with metrics and team metrics only' do
       # Setup
       let(:timeseries_data) { nil }
+      let(:issues_data) { nil }
 
       it 'stores the provided data correctly' do
         # Verify
@@ -81,6 +105,7 @@ RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
       # Setup
       let(:team_metrics) { nil }
       let(:timeseries_data) { nil }
+      let(:issues_data) { nil }
 
       it 'stores metrics data correctly' do
         # Verify
@@ -95,6 +120,7 @@ RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
     context 'with all data types' do
       # Setup
       let(:timeseries_data) { timeseries }
+      let(:issues_data) { nil }
 
       it 'stores all provided data including timeseries' do
         # Verify
@@ -116,6 +142,7 @@ RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
         # Setup
         let(:team_metrics) { nil }
         let(:timeseries_data) { nil }
+        let(:issues_data) { nil }
 
         it 'produces valid JSON output with overall metrics' do
           # Verify
@@ -135,6 +162,7 @@ RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
       context 'with metrics and team metrics' do
         # Setup
         let(:timeseries_data) { nil }
+        let(:issues_data) { nil }
 
         it 'includes team metrics in the output' do
           # Verify
@@ -150,6 +178,7 @@ RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
       context 'with timeseries data' do
         # Setup
         let(:timeseries_data) { timeseries }
+        let(:issues_data) { nil }
 
         it 'includes timeseries data in the output' do
           # Verify
@@ -168,6 +197,61 @@ RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
             expect(timeseries_data).to have_key('status_flow_analysis')
             expect(timeseries_data).to have_key('average_time_in_status')
             expect(timeseries_data).to have_key('daily_status_counts')
+          end
+        end
+      end
+
+      context 'with individual tickets data' do
+        # Setup
+        let(:team_metrics) { nil }
+        let(:timeseries_data) { nil }
+        let(:issues_data) { sample_issues }
+
+        it 'includes individual tickets in the output' do
+          # Verify
+          aggregate_failures 'individual tickets inclusion' do
+            expect(parsed_json).to have_key('overall_metrics')
+            expect(parsed_json).to have_key('individual_tickets')
+            expect(parsed_json['individual_tickets']).to be_an(Array)
+            expect(parsed_json['individual_tickets'].length).to eq(2)
+          end
+        end
+
+        it 'includes calculated metrics for each ticket' do
+          # Verify
+          ticket = parsed_json['individual_tickets'].first
+          aggregate_failures 'ticket metrics calculation' do
+            expect(ticket).to have_key('identifier')
+            expect(ticket).to have_key('title')
+            expect(ticket).to have_key('cycle_time_days')
+            expect(ticket).to have_key('lead_time_days')
+            expect(ticket['cycle_time_days']).to eq(3.08) # From 2024-01-02 14:00 to 2024-01-05 16:00
+            expect(ticket['lead_time_days']).to eq(4.25) # From 2024-01-01 10:00 to 2024-01-05 16:00
+          end
+        end
+
+        it 'handles incomplete tickets correctly' do
+          # Verify
+          incomplete_ticket = parsed_json['individual_tickets'].last
+          aggregate_failures 'incomplete ticket handling' do
+            expect(incomplete_ticket['completedAt']).to be_nil
+            expect(incomplete_ticket['cycle_time_days']).to be_nil
+            expect(incomplete_ticket['lead_time_days']).to be_nil
+          end
+        end
+      end
+
+      context 'without individual tickets data' do
+        # Setup
+        let(:team_metrics) { nil }
+        let(:timeseries_data) { nil }
+        let(:issues_data) { nil }
+
+        it 'does not include individual tickets section' do
+          # Verify
+          aggregate_failures 'no individual tickets' do
+            expect(parsed_json).to have_key('overall_metrics')
+            expect(parsed_json).not_to have_key('individual_tickets')
           end
         end
       end

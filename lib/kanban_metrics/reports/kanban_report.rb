@@ -14,7 +14,7 @@ module KanbanMetrics
       def display(format = 'table')
         case format
         when 'json'
-          puts Formatters::JsonFormatter.new(@metrics, @team_metrics, @timeseries).generate
+          puts Formatters::JsonFormatter.new(@metrics, @team_metrics, @timeseries, @issues).generate
         when 'csv'
           puts Formatters::CsvFormatter.new(@metrics, @team_metrics, @timeseries, @issues).generate
         else
@@ -27,13 +27,14 @@ module KanbanMetrics
       private
 
       def display_table_format
-        formatter = Formatters::TableFormatter.new(@metrics, @team_metrics)
+        formatter = Formatters::TableFormatter.new(@metrics, @team_metrics, @issues)
 
         formatter.print_summary
         formatter.print_cycle_time
         formatter.print_lead_time
         formatter.print_throughput
         formatter.print_team_metrics if @team_metrics
+        formatter.print_individual_tickets if @issues
         formatter.print_kpi_definitions
       end
 

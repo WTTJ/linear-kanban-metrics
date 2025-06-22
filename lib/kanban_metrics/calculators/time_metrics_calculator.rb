@@ -7,54 +7,41 @@ module KanbanMetrics
     # Calculates time-based metrics
     class TimeMetricsCalculator
       def initialize(issues)
-        @issues = issues
+        @issues = issues.is_a?(Array) ? convert_to_domain_issues(issues) : issues
       end
 
       def cycle_time_stats
-        times = calculate_cycle_times
+        times = @issues.filter_map(&:cycle_time_days).compact
         build_time_stats(times)
       end
 
       def lead_time_stats
-        times = calculate_lead_times
+        times = @issues.filter_map(&:lead_time_days).compact
         build_time_stats(times)
+      end
+
+      # Calculate cycle time for a single issue
+      def cycle_time_for_issue(issue_data)
+        issue = ensure_domain_issue(issue_data)
+        issue.cycle_time_days
+      end
+
+      # Calculate lead time for a single issue
+      def lead_time_for_issue(issue_data)
+        issue = ensure_domain_issue(issue_data)
+        issue.lead_time_days
       end
 
       private
 
-      def calculate_cycle_times
-        @issues.filter_map do |issue|
-          started_at = find_start_time(issue)
-          completed_at = issue['completedAt']
-          next unless started_at && completed_at
-
-          calculate_time_difference(started_at, completed_at)
-        end
+      def convert_to_domain_issues(raw_issues)
+        raw_issues.map { |issue_data| Domain::Issue.new(issue_data) }
       end
 
-      def calculate_lead_times
-        @issues.filter_map do |issue|
-          created_at = issue['createdAt']
-          completed_at = issue['completedAt']
-          next unless created_at && completed_at
+      def ensure_domain_issue(issue_data)
+        return issue_data if issue_data.is_a?(Domain::Issue)
 
-          calculate_time_difference(created_at, completed_at)
-        end
-      end
-
-      def find_start_time(issue)
-        issue['startedAt'] || find_history_time(issue, 'started')
-      end
-
-      def find_history_time(issue, state_type)
-        event = issue.dig('history', 'nodes')&.find do |e|
-          e.dig('toState', 'type') == state_type
-        end
-        event&.dig('createdAt')
-      end
-
-      def calculate_time_difference(start_time, end_time)
-        (DateTime.parse(end_time) - DateTime.parse(start_time)).to_f
+        Domain::Issue.new(issue_data)
       end
 
       def build_time_stats(times)

@@ -83,7 +83,7 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
       it 'uses JsonFormatter and outputs JSON to stdout' do
         # Given: A report with all data and a mocked JSON formatter
         allow(KanbanMetrics::Formatters::JsonFormatter).to receive(:new)
-          .with(sample_metrics, sample_team_metrics, sample_timeseries)
+          .with(sample_metrics, sample_team_metrics, sample_timeseries, nil)
           .and_return(mock_json_formatter)
         allow(mock_json_formatter).to receive(:generate).and_return(expected_json)
 
@@ -143,7 +143,7 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
       before do
         # Setup table formatter mock
         allow(KanbanMetrics::Formatters::TableFormatter).to receive(:new)
-          .with(sample_metrics, sample_team_metrics)
+          .with(sample_metrics, sample_team_metrics, nil)
           .and_return(mock_table_formatter)
         setup_table_formatter_stubs
       end
@@ -236,7 +236,11 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
 
       def setup_table_formatter
         allow(KanbanMetrics::Formatters::TableFormatter).to receive(:new)
-          .and_return(mock_table_formatter)
+          .with(any_args).and_return(mock_table_formatter)
+        configure_table_formatter_methods
+      end
+
+      def configure_table_formatter_methods
         allow(mock_table_formatter).to receive(:print_summary)
         allow(mock_table_formatter).to receive(:print_cycle_time)
         allow(mock_table_formatter).to receive(:print_lead_time)
@@ -261,7 +265,7 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
 
       before do
         allow(KanbanMetrics::Formatters::TableFormatter).to receive(:new)
-          .with(sample_metrics, nil)
+          .with(sample_metrics, nil, nil)
           .and_return(mock_table_formatter)
         setup_table_formatter_stubs
       end
@@ -331,7 +335,7 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
       it 'creates TableFormatter and calls all print methods in sequence' do
         # Given: A report with metrics and team metrics
         allow(KanbanMetrics::Formatters::TableFormatter).to receive(:new)
-          .with(sample_metrics, sample_team_metrics)
+          .with(sample_metrics, sample_team_metrics, nil)
           .and_return(mock_table_formatter)
         setup_table_formatter_stubs
 
@@ -341,7 +345,7 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
         # Then: Should create formatter and call all methods
         aggregate_failures do
           expect(KanbanMetrics::Formatters::TableFormatter).to have_received(:new)
-            .with(sample_metrics, sample_team_metrics)
+            .with(sample_metrics, sample_team_metrics, nil)
 
           # And: Should call all print methods
           expect(mock_table_formatter).to have_received(:print_summary)

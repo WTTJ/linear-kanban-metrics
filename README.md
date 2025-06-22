@@ -36,7 +36,7 @@ Run the script to collect metrics:
 - `--no-cache` - Disable API response caching (fetch fresh data)
 - `--team-metrics` - Include team-based metrics breakdown (disabled by default)
 - `--include-archived` - Include archived tickets in the analysis (disabled by default)
-- `--ticket-details` - Include individual ticket details in CSV export (disabled by default)
+- `--ticket-details` - Include individual ticket details in output (disabled by default, works with all formats)
 
 ### Examples
 
@@ -59,10 +59,12 @@ Run the script to collect metrics:
 # Output as CSV with team metrics
 ./bin/kanban_metrics --format csv --team-metrics
 
-# Output as CSV with individual ticket details
-./bin/kanban_metrics --format csv --ticket-details
+# Output with individual ticket details (available in all formats)
+./bin/kanban_metrics --ticket-details                           # Table format with ticket details
+./bin/kanban_metrics --format json --ticket-details             # JSON format with ticket details
+./bin/kanban_metrics --format csv --ticket-details              # CSV format with ticket details
 
-# Output as CSV with team metrics and ticket details
+# Combine team metrics and ticket details
 ./bin/kanban_metrics --format csv --team-metrics --ticket-details
 
 # Include archived tickets in the analysis
@@ -230,46 +232,59 @@ This helps identify:
 - ⚡ **Process Issues**: Unusual transitions or delays
 - 📈 **Trend Analysis**: How activity changes over time
 
-## CSV Export Features
+## Export Features with Individual Ticket Details
 
-When using `--format csv`, the output includes three comprehensive sections:
+The `--ticket-details` flag enables detailed export of individual ticket data in **all output formats** (table, JSON, CSV).
 
-### 1. Overall Metrics
-Standard project-level metrics in CSV format:
-```csv
-Metric,Value,Unit
-Total Issues,15,count
-Completed Issues,10,count
-Average Cycle Time,8.5,days
-Lead Time,12.3,days
-...
+### Output Format Examples
+
+**Table Format** (`--format table --ticket-details`):
+```
+🎫 INDIVIDUAL TICKET DETAILS
++----------+---------------------------+------+----------+----------+
+| ID       | Title                     | State| Created  | Completed|
++----------+---------------------------+------+----------+----------+
+| PROJ-123 | User authentication       | Done | 2024-06-01| 2024-06-08|
+| PROJ-124 | Login bug fix             | Done | 2024-06-02| 2024-06-07|
++----------+---------------------------+------+----------+----------+
 ```
 
-### 2. Team Metrics (with `--team-metrics`)
-Per-team breakdown with all key metrics:
-```csv
-Team,Total Issues,Completed Issues,Avg Cycle Time,Throughput
-Backend Team,8,6,7.2,6
-Frontend Team,7,4,10.1,4
+**JSON Format** (`--format json --ticket-details`):
+```json
+{
+  "overall_metrics": { ... },
+  "team_metrics": { ... },
+  "individual_tickets": [
+    {
+      "identifier": "PROJ-123", 
+      "title": "User authentication",
+      "state": { "name": "Done" },
+      "calculated_metrics": {
+        "cycle_time_days": 6.25,
+        "lead_time_days": 7.29
+      }
+    }
+  ]
+}
 ```
 
-### 3. Individual Tickets (with `--ticket-details`)
-**NEW**: Detailed export of every ticket with calculated metrics:
+**CSV Format** (`--format csv --ticket-details`):
 ```csv
 ID,Identifier,Title,State,Team,Assignee,Priority,Cycle Time (days),Lead Time (days)
 abc123,PROJ-123,User authentication,Done,Backend Team,John Doe,1,6.25,7.29
 def456,PROJ-124,Login bug fix,Done,Frontend Team,Jane Smith,0,1.1,1.9
-...
 ```
 
-**Note**: Individual tickets are only included when using the `--ticket-details` flag. Without this flag, CSV export contains only aggregated metrics.
+### Key Features
 
-This individual tickets section includes:
+**Individual ticket details include:**
 - All Linear ticket fields (ID, identifier, title, state, team, assignee, priority, estimate)
 - Timestamps (created, updated, started, completed, archived)
 - **Calculated cycle time** (started → completed) 
 - **Calculated lead time** (created → completed)
 - Proper handling of incomplete tickets (empty time fields for in-progress/backlog items)
+
+**Note**: Individual tickets are only included when using the `--ticket-details` flag. Without this flag, output contains only aggregated metrics.
 
 Perfect for:
 - 📊 **Data analysis** in Excel, Google Sheets, or BI tools

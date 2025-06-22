@@ -22,9 +22,10 @@ module KanbanMetrics
         total_completed: 'Total items delivered in time period'
       }.freeze
 
-      def initialize(metrics, team_metrics = nil)
+      def initialize(metrics, team_metrics = nil, issues = nil)
         @metrics = metrics
         @team_metrics = team_metrics
+        @issues = issues
       end
 
       def print_summary
@@ -62,6 +63,15 @@ module KanbanMetrics
         table = build_definitions_table
         puts "\n📚 KPI DEFINITIONS"
         puts '=' * 80
+        puts table
+      end
+
+      def print_individual_tickets
+        return unless @issues&.any?
+
+        puts "\n🎫 INDIVIDUAL TICKET DETAILS"
+        puts '=' * 80
+        table = build_individual_tickets_table
         puts table
       end
 
@@ -177,6 +187,42 @@ module KanbanMetrics
             ]
           end
         end
+      end
+
+      def build_individual_tickets_table
+        Terminal::Table.new do |tab|
+          tab.headings = [
+            'ID', 'Title', 'State', 'Created At', 'Completed At',
+            'Cycle Time (days)', 'Lead Time (days)', 'Team'
+          ]
+
+          @issues.each do |issue_data|
+            issue = ensure_domain_issue(issue_data)
+
+            tab.add_row [
+              issue.identifier || 'N/A',
+              truncate_title(issue.title || 'N/A'),
+              issue.state_name || 'N/A',
+              Utils::TimestampFormatter.to_display(issue.created_at),
+              Utils::TimestampFormatter.to_display(issue.completed_at),
+              issue.cycle_time_days || 'N/A',
+              issue.lead_time_days || 'N/A',
+              issue.team_name || 'N/A'
+            ]
+          end
+        end
+      end
+
+      def ensure_domain_issue(issue_data)
+        return issue_data if issue_data.is_a?(Domain::Issue)
+
+        Domain::Issue.new(issue_data)
+      end
+
+      def truncate_title(title, max_length = 30)
+        return title if title.length <= max_length
+
+        "#{title[0, max_length - 3]}..."
       end
     end
   end

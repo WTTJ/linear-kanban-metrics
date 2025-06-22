@@ -398,17 +398,17 @@ RSpec.describe KanbanMetrics::Formatters::CsvFormatter do
 
         # Check first issue (completed)
         expect(result).to include('issue-1,PROJ-123,Implement user authentication,Done,completed,Backend Team,John Doe,1,3,2024-01-01T09:00:00Z,2024-01-05T17:00:00Z,2024-01-02T10:00:00Z,2024-01-05T16:00:00Z,,3.25,4.29')
-        
+
         # Check second issue (in progress - no completion time)
         expect(result).to include('issue-2,PROJ-124,Fix login bug,In Progress,started,Frontend Team,Jane Smith,0,1,2024-01-03T14:00:00Z,2024-01-06T11:00:00Z,2024-01-04T09:00:00Z,,,')
-        
+
         # Check third issue (backlog - no start or completion time)
         expect(result).to include('issue-3,PROJ-125,Add new dashboard widget,Backlog,unstarted,Frontend Team,,2,5,2024-01-06T10:00:00Z,2024-01-06T10:00:00Z,,,,,')
       end
 
       it 'calculates cycle time correctly for completed issues' do
         result = formatter.generate
-        
+
         # Issue 1: started 2024-01-02T10:00:00Z, completed 2024-01-05T16:00:00Z
         # Should be ~3.25 days
         expect(result).to include('3.25')
@@ -416,28 +416,28 @@ RSpec.describe KanbanMetrics::Formatters::CsvFormatter do
 
       it 'calculates lead time correctly for completed issues' do
         result = formatter.generate
-        
-        # Issue 1: created 2024-01-01T09:00:00Z, completed 2024-01-05T16:00:00Z  
+
+        # Issue 1: created 2024-01-01T09:00:00Z, completed 2024-01-05T16:00:00Z
         # Should be ~4.29 days
         expect(result).to include('4.29')
       end
 
       it 'handles nil values gracefully' do
         result = formatter.generate
-        
+
         # Issue 3 has nil assignee, startedAt, completedAt, archivedAt
         expect(result).to include('Frontend Team,,2,5')
       end
 
       it 'does not calculate times for incomplete issues' do
         result = formatter.generate
-        
+
         # Issue 2 (in progress) should have empty cycle time since no completedAt
         # Issue 3 (backlog) should have empty cycle and lead time
         lines = result.split("\n")
         issue_2_line = lines.find { |line| line.include?('issue-2') }
         issue_3_line = lines.find { |line| line.include?('issue-3') }
-        
+
         expect(issue_2_line).to end_with(',,')  # No cycle or lead time
         expect(issue_3_line).to end_with(',,')  # No cycle or lead time
       end

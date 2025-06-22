@@ -130,7 +130,7 @@ issues = [
   }
 ]
 
-puts "=== Kanban Metrics CSV Export Demo ==="
+puts '=== Kanban Metrics CSV Export Demo ==='
 puts "Generating CSV report with #{issues.length} individual tickets...\n\n"
 
 # Create CSV formatter with all data including individual issues
@@ -140,10 +140,10 @@ csv_output = formatter.generate
 puts csv_output
 
 puts "\n=== Demo Complete ==="
-puts "CSV output includes:"
-puts "• Overall project metrics"
-puts "• Team-based metrics breakdown"  
-puts "• Individual ticket details with calculated cycle/lead times"
+puts 'CSV output includes:'
+puts '• Overall project metrics'
+puts '• Team-based metrics breakdown'
+puts '• Individual ticket details with calculated cycle/lead times'
 puts "• #{issues.count { |i| i['state']['type'] == 'completed' }} completed tickets with timing data"
 puts "• #{issues.count { |i| i['state']['type'] == 'started' }} in-progress tickets"
 puts "• #{issues.count { |i| i['state']['type'] == 'unstarted' }} backlog tickets"

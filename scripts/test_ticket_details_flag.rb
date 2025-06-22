@@ -4,7 +4,7 @@
 # Test script to verify --ticket-details flag behavior
 require_relative '../lib/kanban_metrics'
 
-puts "=== Testing --ticket-details Flag Behavior ==="
+puts '=== Testing --ticket-details Flag Behavior ==='
 
 # Sample data
 metrics = {
@@ -35,19 +35,19 @@ issues = [
 ]
 
 puts "\n1. CSV WITHOUT --ticket-details (issues = nil):"
-puts "=" * 50
+puts '=' * 50
 formatter_without = KanbanMetrics::Formatters::CsvFormatter.new(metrics, nil, nil, nil)
 csv_without = formatter_without.generate
 puts csv_without
 
 puts "\n2. CSV WITH --ticket-details (issues provided):"
-puts "=" * 50
+puts '=' * 50
 formatter_with = KanbanMetrics::Formatters::CsvFormatter.new(metrics, nil, nil, issues)
 csv_with = formatter_with.generate
 puts csv_with
 
 puts "\n=== Verification ==="
-puts "Without --ticket-details:"
+puts 'Without --ticket-details:'
 puts "  ✓ Contains overall metrics: #{csv_without.include?('Total Issues') ? 'YES' : 'NO'}"
 puts "  ✓ Contains individual tickets: #{csv_without.include?('INDIVIDUAL TICKETS') ? 'YES' : 'NO'}"
 

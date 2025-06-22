@@ -91,45 +91,36 @@ module KanbanMetrics
       def add_individual_tickets(csv)
         csv << []
         csv << ['INDIVIDUAL TICKETS']
-        csv << ['ID', 'Identifier', 'Title', 'State', 'State Type', 'Team', 'Assignee', 'Priority', 'Estimate', 
+        csv << ['ID', 'Identifier', 'Title', 'State', 'State Type', 'Team', 'Assignee', 'Priority', 'Estimate',
                 'Created At', 'Updated At', 'Started At', 'Completed At', 'Archived At', 'Cycle Time (days)', 'Lead Time (days)']
 
-        @issues.each do |issue|
+        @issues.each do |issue_data|
+          issue = ensure_domain_issue(issue_data)
           csv << [
-            issue['id'],
-            issue['identifier'],
-            issue['title'],
-            issue.dig('state', 'name'),
-            issue.dig('state', 'type'),
-            issue.dig('team', 'name'),
-            issue.dig('assignee', 'name'),
-            issue['priority'],
-            issue['estimate'],
-            issue['createdAt'],
-            issue['updatedAt'],
-            issue['startedAt'],
-            issue['completedAt'],
-            issue['archivedAt'],
-            calculate_cycle_time(issue),
-            calculate_lead_time(issue)
+            issue.id,
+            issue.identifier,
+            issue.title,
+            issue.state_name,
+            issue.state_type,
+            issue.team_name,
+            issue.assignee_name,
+            issue.priority,
+            issue.estimate,
+            Utils::TimestampFormatter.to_iso(issue.created_at),
+            Utils::TimestampFormatter.to_iso(issue.updated_at),
+            Utils::TimestampFormatter.to_iso(issue.started_at),
+            Utils::TimestampFormatter.to_iso(issue.completed_at),
+            Utils::TimestampFormatter.to_iso(issue.archived_at),
+            issue.cycle_time_days,
+            issue.lead_time_days
           ]
         end
       end
 
-      def calculate_cycle_time(issue)
-        return nil unless issue['startedAt'] && issue['completedAt']
-        
-        start_time = DateTime.parse(issue['startedAt'])
-        end_time = DateTime.parse(issue['completedAt'])
-        ((end_time - start_time).to_f).round(2)
-      end
+      def ensure_domain_issue(issue_data)
+        return issue_data if issue_data.is_a?(Domain::Issue)
 
-      def calculate_lead_time(issue)
-        return nil unless issue['createdAt'] && issue['completedAt']
-        
-        start_time = DateTime.parse(issue['createdAt'])
-        end_time = DateTime.parse(issue['completedAt'])
-        ((end_time - start_time).to_f).round(2)
+        Domain::Issue.new(issue_data)
       end
     end
   end
