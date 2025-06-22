@@ -15,7 +15,7 @@ module KanbanMetrics
 
       # Initialize with array of completed issues
       #
-      # @param completed_issues [Array<Hash>] Array of issue hashes with 'completedAt' field
+      # @param completed_issues [Array<Domain::Issue, Hash>] Array of issue objects or hashes
       def initialize(completed_issues)
         @completed_issues = Array(completed_issues)
       end
@@ -84,22 +84,15 @@ module KanbanMetrics
 
       # Extract week identifier from issue completion date
       #
-      # @param issue [Hash] Issue hash with 'completedAt' field
+      # @param issue [Domain::Issue, Hash] Issue object or hash
       # @return [String] Week identifier in format 'YYYY-WNN' or 'invalid-date'
       def extract_week_from_issue(issue)
-        completed_at = issue['completedAt']
+        # Handle both Domain::Issue objects and raw hashes for backward compatibility
+        completed_at = issue.respond_to?(:completed_at) ? issue.completed_at : issue['completedAt']
 
-        return handle_missing_date if date_missing_or_empty?(completed_at)
+        return handle_missing_date if completed_at.nil?
 
         parse_completion_date(completed_at)
-      end
-
-      # Check if completion date is missing or empty
-      #
-      # @param completed_at [String, nil] Completion date string
-      # @return [Boolean] True if date is nil or empty
-      def date_missing_or_empty?(completed_at)
-        completed_at.nil? || completed_at.empty?
       end
 
       # Handle missing completion date
@@ -112,11 +105,13 @@ module KanbanMetrics
 
       # Parse completion date to week format
       #
-      # @param completed_at [String] Completion date string
+      # @param completed_at [DateTime, String] Completion date object or string
       # @return [String] Week identifier or invalid date key
       def parse_completion_date(completed_at)
-        Date.parse(completed_at).strftime('%Y-W%U')
-      rescue ArgumentError => e
+        # Handle both DateTime objects and string timestamps
+        date_obj = completed_at.is_a?(String) ? Date.parse(completed_at) : completed_at.to_date
+        date_obj.strftime('%Y-W%U')
+      rescue StandardError => e
         log_warning("Invalid date '#{completed_at}' - #{e.message}")
         INVALID_DATE_KEY
       end

@@ -5,7 +5,7 @@ module KanbanMetrics
     # Main metrics calculator that orchestrates all calculations
     class KanbanMetricsCalculator
       def initialize(issues)
-        @issues = issues
+        @issues = convert_to_domain_issues(issues)
       end
 
       def overall_metrics
@@ -31,8 +31,14 @@ module KanbanMetrics
 
       private
 
+      def convert_to_domain_issues(issues)
+        issues.map do |issue|
+          issue.is_a?(Domain::Issue) ? issue : Domain::Issue.new(issue)
+        end
+      end
+
       def group_issues_by_team
-        @issues.group_by { |issue| issue.dig('team', 'name') || 'Unknown Team' }
+        @issues.group_by { |issue| issue.team_name || 'Unknown Team' }
       end
 
       def calculate_team_stats(team_issues)

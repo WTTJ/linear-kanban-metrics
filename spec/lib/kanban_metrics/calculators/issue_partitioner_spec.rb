@@ -4,7 +4,7 @@ require 'spec_helper'
 require_relative '../../../../lib/kanban_metrics/calculators/issue_partitioner'
 
 RSpec.describe KanbanMetrics::Calculators::IssuePartitioner do
-  # Arrange - Test data setup
+  # Test data setup using factory-generated hash data
   let(:completed_issues) do
     [
       build(:linear_issue, :completed),
@@ -31,12 +31,9 @@ RSpec.describe KanbanMetrics::Calculators::IssuePartitioner do
 
   describe '.partition' do
     context 'when partitioning mixed issues' do
-      it 'correctly partitions issues into completed, in_progress, and backlog' do
-        # Arrange
-        issues = all_issues
-
+      it 'correctly partitions issues into completed, in_progress, and backlog arrays' do
         # Act
-        completed, in_progress, backlog = described_class.partition(issues)
+        completed, in_progress, backlog = described_class.partition(all_issues)
 
         # Assert
         aggregate_failures 'partition sizes and structure' do
@@ -49,66 +46,75 @@ RSpec.describe KanbanMetrics::Calculators::IssuePartitioner do
         end
       end
 
-      it 'correctly identifies completed issues' do
-        # Arrange
-        issues = all_issues
-
+      it 'returns Domain::Issue objects in all partitions' do
         # Act
-        completed, = described_class.partition(issues)
+        completed, in_progress, backlog = described_class.partition(all_issues)
+
+        # Assert
+        aggregate_failures 'domain object types' do
+          expect(completed).to all(be_a(KanbanMetrics::Domain::Issue))
+          expect(in_progress).to all(be_a(KanbanMetrics::Domain::Issue))
+          expect(backlog).to all(be_a(KanbanMetrics::Domain::Issue))
+        end
+      end
+
+      it 'correctly partitions completed issues by state type' do
+        # Act
+        completed, = described_class.partition(all_issues)
 
         # Assert
         aggregate_failures 'completed issues validation' do
           expect(completed).not_to be_empty
           completed.each do |issue|
-            expect(issue['state']['type']).to eq('completed')
-            expect(issue).to have_key('completedAt')
+            expect(issue.state_type).to eq('completed')
+            expect(issue.completed_at).not_to be_nil
           end
         end
       end
 
-      it 'correctly identifies in progress issues' do
-        # Arrange
-        issues = all_issues
-
+      it 'correctly partitions in progress issues by state type' do
         # Act
-        _, in_progress, = described_class.partition(issues)
+        _, in_progress, = described_class.partition(all_issues)
 
         # Assert
         aggregate_failures 'in progress issues validation' do
           expect(in_progress).not_to be_empty
           in_progress.each do |issue|
-            expect(issue['state']['type']).to eq('started')
-            expect(issue).to have_key('startedAt')
+            expect(issue.state_type).to eq('started')
+            expect(issue.started_at).not_to be_nil
           end
         end
       end
 
-      it 'correctly identifies backlog issues' do
-        # Arrange
-        issues = all_issues
-
+      it 'correctly partitions backlog issues by state type' do
         # Act
-        _, _, backlog = described_class.partition(issues)
+        _, _, backlog = described_class.partition(all_issues)
 
         # Assert
         aggregate_failures 'backlog issues validation' do
           expect(backlog).not_to be_empty
           backlog.each do |issue|
-            expect(issue['state']['type']).to eq('backlog')
-            expect(issue).not_to have_key('completedAt')
-            expect(issue).not_to have_key('startedAt')
+            expect(issue.state_type).to eq('backlog')
+            expect(issue.completed_at).to be_nil
+            expect(issue.started_at).to be_nil
           end
         end
+      end
+
+      it 'ensures no issues are lost or duplicated during partitioning' do
+        # Act
+        completed, in_progress, backlog = described_class.partition(all_issues)
+
+        # Assert
+        total_partitioned = completed.size + in_progress.size + backlog.size
+        expect(total_partitioned).to eq(all_issues.size)
       end
     end
 
     context 'when handling edge cases' do
-      it 'handles empty issue list' do
-        # Arrange
-        empty_issues = []
-
+      it 'handles empty issue list gracefully' do
         # Act
-        completed, in_progress, backlog = described_class.partition(empty_issues)
+        completed, in_progress, backlog = described_class.partition([])
 
         # Assert
         aggregate_failures 'empty list results' do
@@ -121,150 +127,127 @@ RSpec.describe KanbanMetrics::Calculators::IssuePartitioner do
         end
       end
 
-      it 'handles issues with unknown state types' do
-        # Arrange
-        unknown_issue = build(:linear_issue)
-        unknown_issue['state']['type'] = 'unknown'
-        issues_with_unknown = [unknown_issue]
-
+      it 'handles nil input gracefully' do
         # Act
-        completed, in_progress, backlog = described_class.partition(issues_with_unknown)
+        completed, in_progress, backlog = described_class.partition(nil)
 
         # Assert
-        aggregate_failures 'unknown state handling' do
+        aggregate_failures 'nil input results' do
           expect(completed).to eq([])
           expect(in_progress).to eq([])
-          expect(backlog).to eq([unknown_issue])
-          expect(backlog.first['state']['type']).to eq('unknown')
+          expect(backlog).to eq([])
         end
       end
 
-      it 'handles mixed known and unknown state types' do
+      it 'treats unknown state types as backlog items' do
         # Arrange
-        known_issue = build(:linear_issue, :completed)
+        unknown_issue = build(:linear_issue)
+        unknown_issue['state']['type'] = 'unknown'
+
+        # Act
+        completed, in_progress, backlog = described_class.partition([unknown_issue])
+
+        # Assert
+        aggregate_failures 'unknown state handling' do
+          expect(completed).to be_empty
+          expect(in_progress).to be_empty
+          expect(backlog.size).to eq(1)
+          expect(backlog.first.state_type).to eq('unknown')
+        end
+      end
+
+      it 'correctly handles mixed known and unknown state types' do
+        # Arrange
+        known_completed = build(:linear_issue, :completed)
+        known_in_progress = build(:linear_issue, :in_progress)
         unknown_issue = build(:linear_issue)
         unknown_issue['state']['type'] = 'custom_status'
-        mixed_issues = [known_issue, unknown_issue]
+        mixed_issues = [known_completed, known_in_progress, unknown_issue]
 
         # Act
         completed, in_progress, backlog = described_class.partition(mixed_issues)
 
         # Assert
         aggregate_failures 'mixed state types handling' do
-          expect(completed).to eq([known_issue])
-          expect(in_progress).to eq([])
-          expect(backlog).to eq([unknown_issue])
+          expect(completed.size).to eq(1)
+          expect(in_progress.size).to eq(1)
+          expect(backlog.size).to eq(1)
+          expect(completed.first.state_type).to eq('completed')
+          expect(in_progress.first.state_type).to eq('started')
+          expect(backlog.first.state_type).to eq('custom_status')
           expect(completed.size + in_progress.size + backlog.size).to eq(mixed_issues.size)
         end
       end
-    end
-  end
 
-  describe 'private methods' do
-    describe '.completed_status?' do
-      context 'when checking completed status' do
-        it 'returns true for completed issues' do
-          # Arrange
-          issue = build(:linear_issue, :completed)
+      it 'accepts both raw hash data and Domain::Issue objects as input' do
+        # Arrange
+        raw_issue = build(:linear_issue, :completed)
+        domain_issue = KanbanMetrics::Domain::Issue.new(build(:linear_issue, :in_progress))
+        mixed_input = [raw_issue, domain_issue]
 
-          # Act
-          result = described_class.send(:completed_status?, issue)
+        # Act
+        completed, in_progress, backlog = described_class.partition(mixed_input)
 
-          # Assert
-          aggregate_failures 'completed status validation' do
-            expect(result).to be true
-            expect(issue['state']['type']).to eq('completed')
-          end
-        end
-
-        it 'returns false for non-completed issues' do
-          # Arrange
-          in_progress_issue = build(:linear_issue, :in_progress)
-          backlog_issue = build(:linear_issue, :backlog)
-
-          # Act
-          in_progress_result = described_class.send(:completed_status?, in_progress_issue)
-          backlog_result = described_class.send(:completed_status?, backlog_issue)
-
-          # Assert
-          aggregate_failures 'non-completed status validation' do
-            expect(in_progress_result).to be false
-            expect(backlog_result).to be false
-            expect(in_progress_issue['state']['type']).not_to eq('completed')
-            expect(backlog_issue['state']['type']).not_to eq('completed')
-          end
+        # Assert
+        aggregate_failures 'mixed input types handling' do
+          expect(completed.size).to eq(1)
+          expect(in_progress.size).to eq(1)
+          expect(backlog).to be_empty
+          expect(completed.first).to be_a(KanbanMetrics::Domain::Issue)
+          expect(in_progress.first).to be_a(KanbanMetrics::Domain::Issue)
         end
       end
     end
 
-    describe '.in_progress_status?' do
-      context 'when checking in progress status' do
-        it 'returns true for in progress issues' do
-          # Arrange
-          issue = build(:linear_issue, :in_progress)
+    context 'when validating state classification constants' do
+      it 'classifies completed states correctly' do
+        # Arrange
+        completed_issue = build(:linear_issue, :completed)
 
-          # Act
-          result = described_class.send(:in_progress_status?, issue)
+        # Act
+        completed, = described_class.partition([completed_issue])
 
-          # Assert
-          aggregate_failures 'in progress status validation' do
-            expect(result).to be true
-            expect(issue['state']['type']).to eq('started')
-          end
-        end
-
-        it 'returns false for non-in-progress issues' do
-          # Arrange
-          completed_issue = build(:linear_issue, :completed)
-          backlog_issue = build(:linear_issue, :backlog)
-
-          # Act
-          completed_result = described_class.send(:in_progress_status?, completed_issue)
-          backlog_result = described_class.send(:in_progress_status?, backlog_issue)
-
-          # Assert
-          aggregate_failures 'non-in-progress status validation' do
-            expect(completed_result).to be false
-            expect(backlog_result).to be false
-            expect(completed_issue['state']['type']).not_to eq('started')
-            expect(backlog_issue['state']['type']).not_to eq('started')
-          end
-        end
+        # Assert
+        expect(completed.size).to eq(1)
+        expect(described_class::COMPLETED_STATES).to include('completed')
       end
-    end
 
-    describe '.backlog_status?' do
-      context 'when checking backlog status' do
-        it 'returns true for backlog issues' do
-          # Arrange
-          issue = build(:linear_issue, :backlog)
+      it 'classifies in progress states correctly' do
+        # Arrange
+        in_progress_issue = build(:linear_issue, :in_progress)
 
-          # Act
-          result = described_class.send(:backlog_status?, issue)
+        # Act
+        _, in_progress, = described_class.partition([in_progress_issue])
 
-          # Assert
-          aggregate_failures 'backlog status validation' do
-            expect(result).to be true
-            expect(issue['state']['type']).to eq('backlog')
-          end
-        end
+        # Assert
+        expect(in_progress.size).to eq(1)
+        expect(described_class::IN_PROGRESS_STATES).to include('started')
+      end
 
-        it 'returns false for non-backlog issues' do
-          # Arrange
-          completed_issue = build(:linear_issue, :completed)
-          in_progress_issue = build(:linear_issue, :in_progress)
+      it 'classifies backlog states correctly' do
+        # Arrange
+        backlog_issue = build(:linear_issue, :backlog)
 
-          # Act
-          completed_result = described_class.send(:backlog_status?, completed_issue)
-          in_progress_result = described_class.send(:backlog_status?, in_progress_issue)
+        # Act
+        _, _, backlog = described_class.partition([backlog_issue])
 
-          # Assert
-          aggregate_failures 'non-backlog status validation' do
-            expect(completed_result).to be false
-            expect(in_progress_result).to be false
-            expect(completed_issue['state']['type']).not_to eq('backlog')
-            expect(in_progress_issue['state']['type']).not_to eq('backlog')
-          end
+        # Assert
+        expect(backlog.size).to eq(1)
+        expect(described_class::BACKLOG_STATES).to include('backlog')
+      end
+
+      it 'has comprehensive state constants' do
+        # Assert state constant definitions
+        aggregate_failures 'state constants validation' do
+          expect(described_class::COMPLETED_STATES).to be_frozen
+          expect(described_class::IN_PROGRESS_STATES).to be_frozen
+          expect(described_class::BACKLOG_STATES).to be_frozen
+          expect(described_class::ALL_KNOWN_STATES).to be_frozen
+
+          expected_all_states = described_class::COMPLETED_STATES +
+                                described_class::IN_PROGRESS_STATES +
+                                described_class::BACKLOG_STATES
+          expect(described_class::ALL_KNOWN_STATES).to eq(expected_all_states)
         end
       end
     end

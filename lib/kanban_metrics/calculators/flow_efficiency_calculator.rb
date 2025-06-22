@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 require 'date'
-require_relative '../domain/issue'
-require_relative '../utils/timestamp_formatter'
 
 module KanbanMetrics
   module Calculators

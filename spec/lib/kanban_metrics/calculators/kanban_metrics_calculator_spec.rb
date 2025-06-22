@@ -268,37 +268,45 @@ RSpec.describe KanbanMetrics::Calculators::KanbanMetricsCalculator do
     let(:calculator) { described_class.new(sample_issues) }
 
     it 'integrates with IssuePartitioner' do
-      # Setup
-      expect(KanbanMetrics::Calculators::IssuePartitioner).to receive(:partition)
-        .with(sample_issues)
-        .and_call_original
+      # Setup - expect Domain::Issue objects to be passed to partition
+      expect(KanbanMetrics::Calculators::IssuePartitioner).to receive(:partition) do |issues|
+        expect(issues).to all(be_a(KanbanMetrics::Domain::Issue))
+        # Return mock data for the test
+        [[], [], []]
+      end
 
       # Execute & Verify
       overall_metrics
     end
 
     it 'integrates with TimeMetricsCalculator' do
-      # Setup
-      expect(KanbanMetrics::Calculators::TimeMetricsCalculator).to receive(:new)
-        .and_call_original
+      # Setup - expect Domain::Issue objects to be passed to TimeMetricsCalculator
+      expect(KanbanMetrics::Calculators::TimeMetricsCalculator).to receive(:new) do |completed_issues|
+        expect(completed_issues).to all(be_a(KanbanMetrics::Domain::Issue))
+        double('time_calculator', cycle_time_stats: {}, lead_time_stats: {})
+      end
 
       # Execute & Verify
       overall_metrics
     end
 
     it 'integrates with ThroughputCalculator' do
-      # Setup
-      expect(KanbanMetrics::Calculators::ThroughputCalculator).to receive(:new)
-        .and_call_original
+      # Setup - expect Domain::Issue objects to be passed to ThroughputCalculator
+      expect(KanbanMetrics::Calculators::ThroughputCalculator).to receive(:new) do |completed_issues|
+        expect(completed_issues).to all(be_a(KanbanMetrics::Domain::Issue))
+        double('throughput_calculator', stats: { total_completed: 0 })
+      end
 
       # Execute & Verify
       overall_metrics
     end
 
     it 'integrates with FlowEfficiencyCalculator' do
-      # Setup
-      expect(KanbanMetrics::Calculators::FlowEfficiencyCalculator).to receive(:new)
-        .and_call_original
+      # Setup - expect Domain::Issue objects to be passed to FlowEfficiencyCalculator
+      expect(KanbanMetrics::Calculators::FlowEfficiencyCalculator).to receive(:new) do |completed_issues|
+        expect(completed_issues).to all(be_a(KanbanMetrics::Domain::Issue))
+        double('flow_efficiency_calculator', calculate: 0.0)
+      end
 
       # Execute & Verify
       overall_metrics

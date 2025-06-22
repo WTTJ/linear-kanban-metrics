@@ -9,7 +9,8 @@ module KanbanMetrics
       attr_reader :raw_data
 
       def initialize(issue_data)
-        @raw_data = issue_data
+        # Prevent double-wrapping: if we already have a Domain::Issue, use its raw_data
+        @raw_data = issue_data.is_a?(Domain::Issue) ? issue_data.raw_data : issue_data
       end
 
       # Core Linear fields
