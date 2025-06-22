@@ -3,9 +3,18 @@
 require 'spec_helper'
 
 RSpec.describe KanbanMetrics::Calculators::TimeMetricsCalculator do
+  # === CLASS METHODS ===
+  # === INSTANCE METHODS ===
   # Test Data Setup
   subject(:calculator) { described_class.new(issues) }
 
+  let(:empty_issues) { [] }
+  let(:incomplete_issues) do
+    [
+      { 'id' => 'issue-4', 'createdAt' => '2024-01-01T10:00:00Z' },
+      { 'id' => 'issue-5', 'startedAt' => '2024-01-01T10:00:00Z' }
+    ]
+  end
   let(:issues_with_times) do
     [
       {
@@ -36,14 +45,55 @@ RSpec.describe KanbanMetrics::Calculators::TimeMetricsCalculator do
     ]
   end
 
-  let(:incomplete_issues) do
-    [
-      { 'id' => 'issue-4', 'createdAt' => '2024-01-01T10:00:00Z' },
-      { 'id' => 'issue-5', 'startedAt' => '2024-01-01T10:00:00Z' }
-    ]
+  describe '.cycle_time_stats' do
+    it 'calculates cycle time statistics directly' do
+      issues = [
+        {
+          'id' => 'issue-1',
+          'startedAt' => '2024-01-01T10:00:00Z',
+          'completedAt' => '2024-01-03T10:00:00Z'
+        },
+        {
+          'id' => 'issue-2',
+          'startedAt' => '2024-01-01T10:00:00Z',
+          'completedAt' => '2024-01-05T10:00:00Z'
+        }
+      ]
+
+      result = described_class.cycle_time_stats(issues)
+
+      expect(result).to include(
+        average: be_a(Float),
+        median: be_a(Float),
+        p95: be_a(Float)
+      )
+    end
   end
 
-  let(:empty_issues) { [] }
+  describe '.lead_time_stats' do
+    it 'calculates lead time statistics directly' do
+      issues = [
+        {
+          'id' => 'issue-1',
+          'createdAt' => '2024-01-01T10:00:00Z',
+          'completedAt' => '2024-01-03T10:00:00Z'
+        },
+        {
+          'id' => 'issue-2',
+          'createdAt' => '2024-01-01T10:00:00Z',
+          'completedAt' => '2024-01-05T10:00:00Z'
+        }
+      ]
+
+      result = described_class.lead_time_stats(issues)
+
+      expect(result).to include(
+        average: be_a(Float),
+        median: be_a(Float),
+        p95: be_a(Float)
+      )
+    end
+  end
 
   describe '#initialize' do
     # Setup
