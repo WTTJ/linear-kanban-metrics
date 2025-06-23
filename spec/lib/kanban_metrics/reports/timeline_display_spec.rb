@@ -3,7 +3,9 @@
 require 'spec_helper'
 
 RSpec.describe KanbanMetrics::Reports::TimelineDisplay do
-  subject(:timeline_display) { described_class.new(issues) }
+  subject(:timeline_display) { described_class.new(issues, **dependencies) }
+
+  let(:dependencies) { {} }
 
   # Shared test data
   let(:sample_issues) do
@@ -53,9 +55,6 @@ RSpec.describe KanbanMetrics::Reports::TimelineDisplay do
       let(:issues) { sample_issues }
 
       it 'creates a timeline display instance' do
-        # Given: An array of issues
-        # When: Creating a timeline display
-        # Then: Should create a valid instance
         expect(timeline_display).to be_a(described_class)
       end
     end
@@ -64,9 +63,24 @@ RSpec.describe KanbanMetrics::Reports::TimelineDisplay do
       let(:issues) { [] }
 
       it 'creates a timeline display instance with empty issues' do
-        # Given: An empty array of issues
-        # When: Creating a timeline display
-        # Then: Should create a valid instance
+        expect(timeline_display).to be_a(described_class)
+      end
+    end
+
+    context 'with custom dependencies' do
+      let(:issues) { sample_issues }
+      let(:mock_data_service) { instance_double(KanbanMetrics::Reports::TimelineDataService) }
+      let(:mock_formatter) { instance_double(KanbanMetrics::Reports::TimelineFormatter) }
+      let(:mock_output_handler) { spy }
+      let(:dependencies) do
+        {
+          data_service: mock_data_service,
+          formatter: mock_formatter,
+          output_handler: mock_output_handler
+        }
+      end
+
+      it 'accepts custom dependencies for testing' do
         expect(timeline_display).to be_a(described_class)
       end
     end
@@ -74,334 +88,263 @@ RSpec.describe KanbanMetrics::Reports::TimelineDisplay do
 
   describe '#show_timeline' do
     let(:issues) { sample_issues }
-    let(:mock_timeseries) { instance_double(KanbanMetrics::Timeseries::TicketTimeseries) }
-
-    before do
-      setup_timeseries_mock
+    let(:mock_data_service) { instance_double(KanbanMetrics::Reports::TimelineDataService) }
+    let(:mock_formatter) { instance_double(KanbanMetrics::Reports::TimelineFormatter) }
+    let(:captured_output) { [] }
+    let(:output_spy) { ->(text) { captured_output << text } }
+    let(:dependencies) do
+      {
+        data_service: mock_data_service,
+        formatter: mock_formatter,
+        output_handler: output_spy
+      }
     end
 
     context 'when issue exists with timeline data' do
-      let(:timeline_data) { sample_timeline_data }
+      let(:timeline_data) { sample_timeline_data.first }
+      let(:formatted_output) { 'formatted timeline output' }
 
-      it 'displays complete timeline with all events and formatting' do
-        # Given: An existing issue with timeline data
-        allow(mock_timeseries).to receive(:generate_timeseries).and_return(timeline_data)
-
-        # When: Showing timeline for the issue
-        output = capture_stdout { timeline_display.show_timeline('issue-1') }
-
-        # Then: Should display formatted timeline header and events
-        aggregate_failures do
-          expect(output).to include('📈 TIMELINE FOR issue-1: Test Issue 1')
-          expect(output).to include('Team: Backend Team')
-          expect(output).to include('=' * 80)
-
-          # And: Should display all timeline events
-          expect(output).to include('2024-01-01 10:00 | Created → Backlog')
-          expect(output).to include('2024-01-02 10:00 | Backlog → In Progress')
-          expect(output).to include('2024-01-05 10:00 | In Progress → Done')
-        end
+      before do
+        allow(mock_data_service).to receive(:find_timeline_data).with('issue-1').and_return(timeline_data)
+        allow(mock_formatter).to receive(:format_timeline).with(timeline_data).and_return(formatted_output)
       end
 
-      it 'uses TicketTimeseries to generate timeline data correctly' do
-        # Given: An existing issue
-        allow(mock_timeseries).to receive(:generate_timeseries).and_return(timeline_data)
-
-        # When: Showing timeline for the issue
+      it 'retrieves timeline data and formats output correctly' do
         timeline_display.show_timeline('issue-1')
 
-        # Then: Should create TicketTimeseries and generate data
         aggregate_failures do
-          expect(KanbanMetrics::Timeseries::TicketTimeseries).to have_received(:new).with(sample_issues)
-          expect(mock_timeseries).to have_received(:generate_timeseries)
+          expect(mock_data_service).to have_received(:find_timeline_data).with('issue-1')
+          expect(mock_formatter).to have_received(:format_timeline).with(timeline_data)
+          expect(captured_output).to eq([formatted_output])
         end
       end
     end
 
     context 'when issue does not exist' do
-      it 'displays not found message with error indicator' do
-        # Given: No matching timeline data
-        allow(mock_timeseries).to receive(:generate_timeseries).and_return([])
+      let(:not_found_message) { '❌ Issue non-existent not found' }
 
-        # When: Showing timeline for non-existent issue
-        output = capture_stdout { timeline_display.show_timeline('non-existent') }
-
-        # Then: Should display error message
-        expect(output).to include('❌ Issue non-existent not found')
+      before do
+        allow(mock_data_service).to receive(:find_timeline_data).with('non-existent').and_return(nil)
+        allow(mock_formatter).to receive(:format_not_found_message).with('non-existent').and_return(not_found_message)
       end
 
-      it 'does not display timeline formatting when issue not found' do
-        # Given: No matching timeline data
-        allow(mock_timeseries).to receive(:generate_timeseries).and_return([])
+      it 'displays not found message' do
+        timeline_display.show_timeline('non-existent')
 
-        # When: Showing timeline for non-existent issue
-        output = capture_stdout { timeline_display.show_timeline('non-existent') }
-
-        # Then: Should not display timeline elements
         aggregate_failures do
-          expect(output).not_to include('TIMELINE FOR')
-          expect(output).not_to include('Team:')
-          expect(output).not_to include('=' * 80)
+          expect(mock_data_service).to have_received(:find_timeline_data).with('non-existent')
+          expect(mock_formatter).to have_received(:format_not_found_message).with('non-existent')
+          expect(captured_output).to eq([not_found_message])
         end
       end
     end
 
-    context 'when issue exists but has empty timeline' do
-      let(:empty_timeline_data) do
-        [
-          {
-            id: 'issue-1',
-            title: 'Test Issue 1',
-            team: 'Backend Team',
-            timeline: []
-          }
-        ]
+    context 'with default dependencies (integration test)' do
+      let(:issues) { sample_issues }
+      let(:mock_timeseries) { instance_double(KanbanMetrics::Timeseries::TicketTimeseries) }
+      let(:integration_display) { described_class.new(issues) }
+
+      before do
+        allow(KanbanMetrics::Timeseries::TicketTimeseries).to receive(:new)
+          .with(sample_issues)
+          .and_return(mock_timeseries)
       end
 
-      it 'displays issue header without timeline events' do
-        # Given: Issue with empty timeline
-        allow(mock_timeseries).to receive(:generate_timeseries).and_return(empty_timeline_data)
+      context 'when issue exists' do
+        it 'displays complete timeline with all events and formatting' do
+          allow(mock_timeseries).to receive(:generate_timeseries).and_return(sample_timeline_data)
 
-        # When: Showing timeline for the issue
-        output = capture_stdout { timeline_display.show_timeline('issue-1') }
+          output = capture_stdout { integration_display.show_timeline('issue-1') }
 
-        # Then: Should display header but not events
-        aggregate_failures do
-          expect(output).to include('📈 TIMELINE FOR issue-1: Test Issue 1')
-          expect(output).to include('Team: Backend Team')
-
-          # But: Should not display any timeline events
-          expect(output).not_to include('Created →')
-          expect(output).not_to include('→ Backlog')
-        end
-      end
-    end
-
-    context 'when issue has complex timeline with multiple transitions' do
-      let(:complex_timeline_data) do
-        [
-          {
-            id: 'issue-1',
-            title: 'Complex Issue',
-            team: 'Complex Team',
-            timeline: [
-              {
-                date: '2024-01-01T10:00:00Z',
-                from_state: nil,
-                to_state: 'Backlog'
-              },
-              {
-                date: '2024-01-02T14:30:00Z',
-                from_state: 'Backlog',
-                to_state: 'In Progress'
-              },
-              {
-                date: '2024-01-03T09:15:00Z',
-                from_state: 'In Progress',
-                to_state: 'In Review'
-              },
-              {
-                date: '2024-01-04T16:45:00Z',
-                from_state: 'In Review',
-                to_state: 'Done'
-              }
-            ]
-          }
-        ]
-      end
-
-      it 'displays all timeline events with correct formatting' do
-        # Given: Issue with complex timeline
-        allow(mock_timeseries).to receive(:generate_timeseries).and_return(complex_timeline_data)
-
-        # When: Showing timeline for the issue
-        output = capture_stdout { timeline_display.show_timeline('issue-1') }
-
-        # Then: Should display all events in correct format
-        aggregate_failures do
-          expect(output).to include('2024-01-01 10:00 | Created → Backlog')
-          expect(output).to include('2024-01-02 14:30 | Backlog → In Progress')
-          expect(output).to include('2024-01-03 09:15 | In Progress → In Review')
-          expect(output).to include('2024-01-04 16:45 | In Review → Done')
+          aggregate_failures do
+            expect(output).to include('📈 TIMELINE FOR issue-1: Test Issue 1')
+            expect(output).to include('Team: Backend Team')
+            expect(output).to include('=' * 80)
+            expect(output).to include('2024-01-01 10:00 | Created → Backlog')
+            expect(output).to include('2024-01-02 10:00 | Backlog → In Progress')
+            expect(output).to include('2024-01-05 10:00 | In Progress → Done')
+          end
         end
       end
 
-      it 'maintains chronological order of events' do
-        # Given: Issue with multiple timeline events
-        allow(mock_timeseries).to receive(:generate_timeseries).and_return(complex_timeline_data)
+      context 'when issue does not exist' do
+        it 'displays not found message' do
+          allow(mock_timeseries).to receive(:generate_timeseries).and_return([])
 
-        # When: Showing timeline for the issue
-        output = capture_stdout { timeline_display.show_timeline('issue-1') }
-        output_lines = output.split("\n")
+          output = capture_stdout { integration_display.show_timeline('non-existent') }
 
-        # Then: Should maintain chronological order
-        aggregate_failures do
-          jan_1_line = output_lines.find { |line| line.include?('2024-01-01') }
-          jan_4_line = output_lines.find { |line| line.include?('2024-01-04') }
-
-          expect(jan_1_line).not_to be_nil
-          expect(jan_4_line).not_to be_nil
-          expect(output_lines.index(jan_1_line)).to be < output_lines.index(jan_4_line)
+          expect(output).to include('❌ Issue non-existent not found')
         end
       end
-    end
-
-    private
-
-    def setup_timeseries_mock
-      allow(KanbanMetrics::Timeseries::TicketTimeseries).to receive(:new)
-        .with(sample_issues)
-        .and_return(mock_timeseries)
     end
   end
+end
 
-  describe 'private methods' do
-    let(:issues) { sample_issues }
-    let(:mock_timeseries) { instance_double(KanbanMetrics::Timeseries::TicketTimeseries) }
+# Supporting classes specs
+RSpec.describe KanbanMetrics::Reports::TimelineDisplayConfig do
+  describe 'constants' do
+    it 'provides configuration values' do
+      aggregate_failures do
+        expect(described_class.header_separator).to eq('=' * 80)
+        expect(described_class.date_format).to eq('%Y-%m-%d %H:%M')
+        expect(described_class.timeline_emoji).to eq('📈')
+        expect(described_class.error_emoji).to eq('❌')
+        expect(described_class.arrow_symbol).to eq('→')
+        expect(described_class.separator_symbol).to eq('|')
+        expect(described_class.created_state).to eq('Created')
+      end
+    end
+  end
+end
 
-    before do
-      setup_timeseries_mock
+RSpec.describe KanbanMetrics::Reports::TimelineDataService do
+  subject(:service) { described_class.new(issues, timeseries_generator) }
+
+  let(:issues) { [{ 'id' => 'test-issue' }] }
+  let(:timeseries_generator) { ->(_data) { sample_timeline_data } }
+  let(:sample_timeline_data) do
+    [
+      { id: 'test-issue', title: 'Test Issue' },
+      { id: 'other-issue', title: 'Other Issue' }
+    ]
+  end
+
+  describe '#find_timeline_data' do
+    context 'when issue exists' do
+      it 'returns the timeline data for the issue' do
+        result = service.find_timeline_data('test-issue')
+        expect(result).to eq({ id: 'test-issue', title: 'Test Issue' })
+      end
     end
 
-    describe '#find_timeline_data' do
-      let(:timeline_data) do
-        [
-          { id: 'issue-1', title: 'Test Issue 1' },
-          { id: 'issue-2', title: 'Test Issue 2' }
-        ]
+    context 'when issue does not exist' do
+      it 'returns nil' do
+        result = service.find_timeline_data('non-existent')
+        expect(result).to be_nil
+      end
+    end
+
+    context 'with default generator' do
+      subject(:service) { described_class.new(issues) }
+
+      let(:mock_timeseries) { instance_double(KanbanMetrics::Timeseries::TicketTimeseries) }
+
+      before do
+        allow(KanbanMetrics::Timeseries::TicketTimeseries).to receive(:new).with(issues).and_return(mock_timeseries)
+        allow(mock_timeseries).to receive(:generate_timeseries).and_return(sample_timeline_data)
       end
 
-      it 'finds timeline data by issue ID when exists' do
-        # Given: Timeline data with multiple issues
-        allow(mock_timeseries).to receive(:generate_timeseries).and_return(timeline_data)
+      it 'uses TicketTimeseries as default generator' do
+        result = service.find_timeline_data('test-issue')
 
-        # When: Finding timeline data for existing issue
-        result = timeline_display.send(:find_timeline_data, 'issue-1')
-
-        # Then: Should return the correct issue data and use TicketTimeseries
         aggregate_failures do
-          expect(result).to eq({ id: 'issue-1', title: 'Test Issue 1' })
-          expect(KanbanMetrics::Timeseries::TicketTimeseries).to have_received(:new).with(sample_issues)
+          expect(KanbanMetrics::Timeseries::TicketTimeseries).to have_received(:new).with(issues)
           expect(mock_timeseries).to have_received(:generate_timeseries)
+          expect(result).to eq({ id: 'test-issue', title: 'Test Issue' })
         end
       end
-
-      it 'returns nil when issue ID does not exist' do
-        # Given: Timeline data without the requested issue
-        allow(mock_timeseries).to receive(:generate_timeseries).and_return(timeline_data)
-
-        # When: Finding timeline data for non-existent issue
-        result = timeline_display.send(:find_timeline_data, 'non-existent')
-
-        # Then: Should return nil
-        expect(result).to be_nil
-      end
-
-      it 'handles empty timeline data gracefully' do
-        # Given: Empty timeline data
-        allow(mock_timeseries).to receive(:generate_timeseries).and_return([])
-
-        # When: Finding timeline data for any issue
-        result = timeline_display.send(:find_timeline_data, 'any-issue')
-
-        # Then: Should return nil
-        expect(result).to be_nil
-      end
     end
+  end
+end
 
-    describe '#print_timeline' do
-      let(:test_timeline_data) do
+RSpec.describe KanbanMetrics::Reports::TimelineEventFormatter do
+  subject(:formatter) { described_class.new }
+
+  describe '#format_event' do
+    context 'with creation event (no from_state)' do
+      let(:event) do
         {
-          id: 'test-issue',
-          title: 'Test Issue Title',
-          team: 'Test Team',
-          timeline: [
-            {
-              date: '2024-01-01T10:00:00Z',
-              from_state: nil,
-              to_state: 'Backlog'
-            },
-            {
-              date: '2024-01-02T14:30:00Z',
-              from_state: 'Backlog',
-              to_state: 'Done'
-            }
-          ]
+          date: '2024-01-01T10:00:00Z',
+          from_state: nil,
+          to_state: 'Backlog'
         }
       end
 
-      it 'prints formatted timeline with header and events' do
-        # Given: Timeline data with header info and events
-        # When: Printing the timeline
-        output = capture_stdout { timeline_display.send(:print_timeline, test_timeline_data) }
+      it 'formats creation event correctly' do
+        result = formatter.format_event(event)
+        expect(result).to eq('2024-01-01 10:00 | Created → Backlog')
+      end
+    end
 
-        # Then: Should display formatted header and events
-        aggregate_failures do
-          expect(output).to include('📈 TIMELINE FOR test-issue: Test Issue Title')
-          expect(output).to include('Team: Test Team')
-          expect(output).to include('=' * 80)
-
-          # And: Should display timeline events
-          expect(output).to include('2024-01-01 10:00 | Created → Backlog')
-          expect(output).to include('2024-01-02 14:30 | Backlog → Done')
-        end
+    context 'with state transition event' do
+      let(:event) do
+        {
+          date: '2024-01-02T14:30:00Z',
+          from_state: 'Backlog',
+          to_state: 'In Progress'
+        }
       end
 
-      it 'handles creation event correctly when from_state is nil' do
-        # Given: Timeline data with creation event
-        # When: Printing the timeline
-        output = capture_stdout { timeline_display.send(:print_timeline, test_timeline_data) }
-
-        # Then: Should show "Created" for initial transition
-        expect(output).to include('Created → Backlog')
+      it 'formats transition event correctly' do
+        result = formatter.format_event(event)
+        expect(result).to eq('2024-01-02 14:30 | Backlog → In Progress')
       end
+    end
+  end
+end
 
-      it 'handles state transitions correctly when from_state exists' do
-        # Given: Timeline data with state transitions
-        # When: Printing the timeline
-        output = capture_stdout { timeline_display.send(:print_timeline, test_timeline_data) }
+RSpec.describe KanbanMetrics::Reports::TimelineFormatter do
+  subject(:formatter) { described_class.new }
 
-        # Then: Should show proper state transition
-        expect(output).to include('Backlog → Done')
+  describe '#format_timeline' do
+    let(:timeline_data) do
+      {
+        id: 'test-issue',
+        title: 'Test Issue',
+        team: 'Test Team',
+        timeline: [
+          {
+            date: '2024-01-01T10:00:00Z',
+            from_state: nil,
+            to_state: 'Backlog'
+          },
+          {
+            date: '2024-01-02T14:30:00Z',
+            from_state: 'Backlog',
+            to_state: 'Done'
+          }
+        ]
+      }
+    end
+
+    it 'formats complete timeline with header and events' do
+      result = formatter.format_timeline(timeline_data)
+
+      aggregate_failures do
+        expect(result).to include('📈 TIMELINE FOR test-issue: Test Issue')
+        expect(result).to include('Team: Test Team')
+        expect(result).to include('=' * 80)
+        expect(result).to include('2024-01-01 10:00 | Created → Backlog')
+        expect(result).to include('2024-01-02 14:30 | Backlog → Done')
       end
+    end
 
-      it 'formats dates correctly in local time format' do
-        # Given: Timeline data with ISO timestamps
-        # When: Printing the timeline
-        output = capture_stdout { timeline_display.send(:print_timeline, test_timeline_data) }
-
-        # Then: Should format dates in readable format
-        expect(output).to include('2024-01-01 10:00')
-        expect(output).to include('2024-01-02 14:30')
-      end
-
-      it 'handles empty timeline array gracefully' do
-        # Given: Timeline data with empty timeline array
-        empty_timeline = {
+    context 'with empty timeline' do
+      let(:timeline_data) do
+        {
           id: 'test-issue',
-          title: 'Test Issue Title',
+          title: 'Test Issue',
           team: 'Test Team',
           timeline: []
         }
+      end
 
-        # When: Printing the timeline
-        output = capture_stdout { timeline_display.send(:print_timeline, empty_timeline) }
+      it 'formats header without events' do
+        result = formatter.format_timeline(timeline_data)
 
-        # Then: Should display header but no timeline events
         aggregate_failures do
-          expect(output).to include('📈 TIMELINE FOR test-issue')
-          expect(output).to include('Team: Test Team')
-          expect(output).not_to include('|')
+          expect(result).to include('📈 TIMELINE FOR test-issue: Test Issue')
+          expect(result).to include('Team: Test Team')
+          expect(result).not_to include('|')
         end
       end
     end
+  end
 
-    private
-
-    def setup_timeseries_mock
-      allow(KanbanMetrics::Timeseries::TicketTimeseries).to receive(:new)
-        .with(sample_issues)
-        .and_return(mock_timeseries)
+  describe '#format_not_found_message' do
+    it 'formats not found message' do
+      result = formatter.format_not_found_message('test-issue')
+      expect(result).to eq('❌ Issue test-issue not found')
     end
   end
 end
