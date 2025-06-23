@@ -25,7 +25,9 @@ module KanbanMetrics
           log_page_fetch(page_state.current_page, collector.total_count)
 
           page_result = fetch_single_page(options, page_state.after_cursor)
-          break unless handle_page_result(page_result, collector, page_state)
+          break unless page_result
+
+          process_page_result(page_result, collector, page_state)
         end
 
         collector.all_issues
@@ -37,12 +39,11 @@ module KanbanMetrics
         page_state.has_next_page? && !page_state.safety_limit_reached?
       end
 
-      def handle_page_result(page_result, collector, page_state)
-        return false if page_result.nil?
+      def process_page_result(page_result, collector, page_state)
+        return unless page_result
 
         collector.add_issues(page_result[:issues])
         page_state.update(page_result[:page_info])
-        true
       end
 
       def fetch_single_page(options, after_cursor)
@@ -63,7 +64,7 @@ module KanbanMetrics
       end
 
       def debug_mode_enabled?
-        ENV['DEBUG']
+        ENV.fetch('DEBUG', nil)
       end
 
       def high_volume_request?(total_issues)
