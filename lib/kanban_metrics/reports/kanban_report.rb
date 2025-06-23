@@ -42,7 +42,7 @@ module KanbanMetrics
 
     # JSON output strategy
     class JsonFormatStrategy
-      def display(report_data, _output = $stdout)
+      def display(report_data)
         content = Formatters::JsonFormatter.new(
           report_data.metrics,
           report_data.team_metrics,
@@ -55,7 +55,7 @@ module KanbanMetrics
 
     # CSV output strategy
     class CsvFormatStrategy
-      def display(report_data, _output = $stdout)
+      def display(report_data)
         content = Formatters::CsvFormatter.new(
           report_data.metrics,
           report_data.team_metrics,
@@ -68,14 +68,14 @@ module KanbanMetrics
 
     # Table output strategy with timeseries support
     class TableFormatStrategy
-      def display(report_data, output = $stdout)
-        display_table_report(report_data, output)
-        display_timeseries_report(report_data, output) if report_data.has_timeseries?
+      def display(report_data)
+        display_table_report(report_data)
+        display_timeseries_report(report_data) if report_data.has_timeseries?
       end
 
       private
 
-      def display_table_report(report_data, _output)
+      def display_table_report(report_data)
         formatter = create_table_formatter(report_data)
 
         formatter.print_summary
@@ -87,7 +87,7 @@ module KanbanMetrics
         formatter.print_kpi_definitions
       end
 
-      def display_timeseries_report(report_data, _output)
+      def display_timeseries_report(report_data)
         Formatters::TimeseriesTableFormatter.new(report_data.timeseries).print_timeseries
       end
 
@@ -102,13 +102,9 @@ module KanbanMetrics
 
     # Service object for report display coordination
     class ReportDisplayService
-      def initialize(output = $stdout)
-        @output = output
-      end
-
       def display(report_data, format = 'table')
         strategy = FormatStrategy.for(format)
-        strategy.display(report_data, @output)
+        strategy.display(report_data)
       end
     end
 
