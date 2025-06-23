@@ -216,15 +216,15 @@ RSpec.describe KanbanMetrics::Linear::ApiPaginator do
   end
 
   describe 'constants' do
-    it 'defines MAX_PAGES constant' do
+    it 'defines MAX_PAGES constant through PaginationConfig' do
       # Execute & Verify
-      expect(described_class::MAX_PAGES).to eq(100)
+      expect(KanbanMetrics::Linear::PaginationConfig::MAX_PAGES).to eq(100)
     end
   end
 
-  describe 'private methods' do
-    describe '#normalize_page_info' do
-      subject(:normalize_page_info) { paginator.send(:normalize_page_info, page_info) }
+  describe 'ResponseParser' do
+    describe '.normalize_page_info' do
+      subject(:normalize_page_info) { KanbanMetrics::Linear::ResponseParser.send(:normalize_page_info, page_info) }
 
       context 'with complete page info' do
         # Setup

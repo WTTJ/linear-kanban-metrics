@@ -11,6 +11,7 @@ gem 'terminal-table', '~> 3.0'
 gem 'zeitwerk', '~> 2.6'
 
 group :development, :test do
+  gem 'brakeman', '~> 6.0'
   gem 'factory_bot', '~> 6.2'
   gem 'faker', '~> 3.2'
   gem 'fiddle', '~> 1.0'
