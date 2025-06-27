@@ -20,7 +20,27 @@ jobs:
   claude-review:
     name: 🧠 GitHub Copilot Analysis
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+               } catch (error) {
+              console.log(`⚠️ Could not create check run: ${error.message}`);
+              console.log(`📝 Review status: ${summary}`);
+              // Continue without failing the workflow
+            }
+            
+      - name: 📋 Summary output
+        if: always()
+        run: |
+          if [ -f tmp/ai-review/copilot-review.md ]; then
+            echo "✅ AI Code Review completed successfully"
+            if grep -q "Request Changes" tmp/ai-review/copilot-review.md; then
+              echo "⚠️ Critical issues found - please review the feedback"
+            elif grep -q "Comment" tmp/ai-review/copilot-review.md; then
+              echo "💡 Suggestions available - consider addressing them"
+            else
+              echo "🎉 Code review passed with good quality"
+            fi
+          else
+            echo "❌ AI Code Review failed to generate"
+          figithub.event.pull_request.draft == false
     
     steps:
       - name: 🔄 Checkout code
@@ -413,15 +433,16 @@ jobs:
           comment-author: 'github-actions[bot]'
           body-includes: '🤖 AI Code Review'
           
-      - name: 🎯 Set PR status based on review
+      - name: 🎯 Set PR check status based on review
         if: always()
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             
-            let state = 'success';
-            let description = 'AI review completed successfully';
+            let conclusion = 'success';
+            let title = 'AI Code Review (GitHub Copilot)';
+            let summary = 'AI review completed successfully';
             
             try {
               // Check if Copilot review exists and contains critical issues
@@ -429,31 +450,45 @@ jobs:
                 const review = fs.readFileSync('tmp/ai-review/copilot-review.md', 'utf8');
                 
                 if (review.includes('🚨 **Critical Issues**') || review.includes('Request Changes')) {
-                  state = 'failure';
-                  description = 'Critical issues found - review needed';
+                  conclusion = 'failure';
+                  summary = 'Critical issues found - review needed';
                 } else if (review.includes('fallback') || review.includes('Manual Review Required')) {
-                  state = 'pending';
-                  description = 'Manual review required';
+                  conclusion = 'neutral';
+                  summary = 'Manual review required';
+                } else if (review.includes('Comment')) {
+                  conclusion = 'neutral';
+                  summary = 'Review completed with suggestions';
                 }
               } else {
-                state = 'error';
-                description = 'AI review failed to generate';
+                conclusion = 'failure';
+                summary = 'AI review failed to generate';
               }
             } catch (error) {
-              state = 'error';
-              description = 'Error processing review results';
+              conclusion = 'failure';
+              summary = 'Error processing review results';
             }
             
-            // Set the status
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.payload.pull_request.head.sha,
-              state: state,
-              description: description,
-              context: 'AI Code Review (GitHub Copilot)',
-              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/pull/${context.payload.pull_request.number}`
-            });
+            // Create a check run instead of commit status (more permissive)
+            try {
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'AI Code Review (GitHub Copilot)',
+                head_sha: context.payload.pull_request.head.sha,
+                status: 'completed',
+                conclusion: conclusion,
+                output: {
+                  title: title,
+                  summary: summary,
+                  text: `Review analysis completed. Check the PR comment for detailed feedback.`
+                }
+              });
+              console.log(`✅ Check run created with conclusion: ${conclusion}`);
+            } catch (error) {
+              console.log(`⚠️ Could not create check run: ${error.message}`);
+              console.log(`📝 Review status: ${summary}`);
+              // Continue without failing the workflow
+            }
             
       - name: 📤 Upload review artifacts
         if: always()
