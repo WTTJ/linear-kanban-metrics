@@ -20,21 +20,14 @@ jobs:
   claude-review:
     name: 🧠 GitHub Copilot Analysis
     runs-on: ubuntu-latest
-               } catch (error) {
-              console.log(`⚠️ Could not create check run: ${error.message}`);
-              console.log(`📝 Review status: ${summary}`);
-              // Continue without failing the workflow
-            }
-            
-      - name: 📋 Summary output
-        if: always()
-        run: |
-          if [ -f tmp/ai-review/copilot-review.md ]; then
-            echo "✅ AI Code Review completed successfully"
-            if grep -q "Request Changes" tmp/ai-review/copilot-review.md; then
-              echo "⚠️ Critical issues found - please review the feedback"
-            elif grep -q "Comment" tmp/ai-review/copilot-review.md; then
-              echo "💡 Suggestions available - consider addressing them"
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: 🔄 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
             else
               echo "🎉 Code review passed with good quality"
             fi
@@ -490,7 +483,23 @@ jobs:
               // Continue without failing the workflow
             }
             
-      - name: 📤 Upload review artifacts
+      - name: � Summary output
+        if: always()
+        run: |
+          if [ -f tmp/ai-review/copilot-review.md ]; then
+            echo "✅ AI Code Review completed successfully"
+            if grep -q "Request Changes" tmp/ai-review/copilot-review.md; then
+              echo "⚠️ Critical issues found - please review the feedback"
+            elif grep -q "Comment" tmp/ai-review/copilot-review.md; then
+              echo "💡 Suggestions available - consider addressing them"
+            else
+              echo "🎉 Code review passed with good quality"
+            fi
+          else
+            echo "❌ AI Code Review failed to generate"
+          fi
+            
+      - name: �📤 Upload review artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
