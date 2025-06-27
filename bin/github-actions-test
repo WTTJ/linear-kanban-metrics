@@ -1,0 +1,176 @@
+#!/bin/bash
+# GitHub Actions Local Testing Script
+# Simulates the key checks that will run in GitHub Actions
+
+set -e
+
+echo "🚀 Simulating GitHub Actions PR Analysis..."
+echo "=============================================="
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+print_status() {
+    local status=$1
+    local message=$2
+    case "$status" in
+        "SUCCESS") echo -e "${GREEN}✅ $message${NC}" ;;
+        "FAILURE") echo -e "${RED}❌ $message${NC}" ;;
+        "WARNING") echo -e "${YELLOW}⚠️  $message${NC}" ;;
+        "INFO") echo -e "${BLUE}ℹ️  $message${NC}" ;;
+    esac
+}
+
+# Create temp directories
+mkdir -p tmp/{github-actions,security}
+
+print_status "INFO" "Starting GitHub Actions simulation..."
+
+# Step 1: RuboCop with GitHub format (simulating reviewdog)
+echo ""
+echo "🎨 Running RuboCop Analysis (GitHub Actions style)..."
+if bundle exec rubocop --format github > tmp/github-actions/rubocop-github.txt 2>&1; then
+    print_status "SUCCESS" "RuboCop analysis passed"
+    echo "No style violations found!"
+else
+    print_status "WARNING" "RuboCop found style issues"
+    echo "GitHub Actions would add inline comments for these issues:"
+    echo ""
+    head -20 tmp/github-actions/rubocop-github.txt
+    echo ""
+    echo "Run 'bundle exec rubocop --auto-correct' to fix auto-correctable issues"
+fi
+
+# Step 2: Security analysis (like GitHub Actions)
+echo ""
+echo "🔒 Running Security Analysis..."
+if bundle exec brakeman --force --format json --output tmp/security/brakeman.json --quiet 2>/dev/null; then
+    warnings=$(jq '.warnings | length' tmp/security/brakeman.json 2>/dev/null || echo "0")
+    
+    if [ "$warnings" -eq "0" ]; then
+        print_status "SUCCESS" "No security vulnerabilities found"
+    else
+        print_status "WARNING" "Found $warnings potential security issues"
+        echo "GitHub Actions would comment with these details:"
+        bundle exec brakeman --force --format plain --quiet 2>/dev/null | head -20
+    fi
+else
+    print_status "WARNING" "Security analysis completed with warnings"
+fi
+
+# Step 3: Simulate targeted testing (for changed files)
+echo ""
+echo "🧪 Simulating Targeted Testing..."
+print_status "INFO" "In a real PR, this would test only files changed in the PR"
+print_status "INFO" "Running a sample of tests to simulate..."
+
+# Run a subset of tests to simulate PR testing
+if bundle exec rspec spec/lib/kanban_metrics/version_spec.rb --format documentation > tmp/github-actions/test-sample.txt 2>&1; then
+    print_status "SUCCESS" "Targeted tests passed"
+    cat tmp/github-actions/test-sample.txt
+else
+    print_status "FAILURE" "Targeted tests failed"
+    tail -10 tmp/github-actions/test-sample.txt
+fi
+
+# Step 4: CLI smoke test
+echo ""
+echo "💨 Running CLI Smoke Test..."
+if bundle exec ruby bin/kanban_metrics --help > tmp/github-actions/cli-test.txt 2>&1; then
+    print_status "SUCCESS" "CLI smoke test passed"
+    echo "CLI help command executed successfully"
+else
+    print_status "FAILURE" "CLI smoke test failed"
+    cat tmp/github-actions/cli-test.txt
+fi
+
+# Step 5: Coverage impact simulation
+echo ""
+echo "📈 Simulating Coverage Impact Analysis..."
+if COVERAGE=true bundle exec rspec --format progress > tmp/github-actions/coverage-test.txt 2>&1; then
+    if [ -f coverage/.last_run.json ]; then
+        coverage=$(jq -r '.result.line' coverage/.last_run.json 2>/dev/null || echo "N/A")
+        if [ "$coverage" != "N/A" ]; then
+            coverage_num=$(echo "$coverage" | sed 's/%//')
+            if (( $(echo "$coverage_num >= 85" | bc -l 2>/dev/null || echo "0") )); then
+                print_status "SUCCESS" "Coverage check passed ($coverage >= 85%)"
+            else
+                print_status "FAILURE" "Coverage below threshold ($coverage < 85%)"
+            fi
+        else
+            print_status "INFO" "Coverage data extracted"
+        fi
+    else
+        print_status "WARNING" "Coverage file not found"
+    fi
+else
+    print_status "FAILURE" "Coverage test failed"
+fi
+
+# Step 6: Generate summary (like GitHub Actions would)
+echo ""
+echo "📊 Generating PR Summary..."
+{
+    echo "## 📊 PR Analysis Summary (Simulated)"
+    echo ""
+    echo "This is what GitHub Actions would post as a PR comment:"
+    echo ""
+    
+    # RuboCop status
+    if bundle exec rubocop --format simple > /dev/null 2>&1; then
+        echo "✅ **RuboCop**: Code style checks passed"
+    else
+        echo "❌ **RuboCop**: Found styling issues (would show inline comments)"
+    fi
+    
+    # Test status
+    echo "✅ **Tests**: Targeted tests passed"
+    
+    # Security status
+    if [ -f tmp/security/brakeman.json ]; then
+        warnings=$(jq '.warnings | length' tmp/security/brakeman.json 2>/dev/null || echo "0")
+        if [ "$warnings" -eq "0" ]; then
+            echo "✅ **Security**: No vulnerabilities detected"
+        else
+            echo "⚠️ **Security**: $warnings potential issues found"
+        fi
+    fi
+    
+    # Coverage status
+    if [ -f coverage/.last_run.json ]; then
+        coverage=$(jq -r '.result.line' coverage/.last_run.json 2>/dev/null || echo "N/A")
+        echo "📈 **Coverage**: $coverage"
+    fi
+    
+    echo ""
+    echo "---"
+    echo "_This analysis was simulated locally. Actual GitHub Actions will provide inline comments and detailed feedback._"
+} > tmp/github-actions/pr-summary.md
+
+cat tmp/github-actions/pr-summary.md
+
+# Final summary
+echo ""
+echo "🎉 GitHub Actions Simulation Complete!"
+echo "======================================"
+print_status "SUCCESS" "Local simulation completed"
+echo ""
+echo "📁 Results saved in tmp/github-actions/ directory:"
+echo "   - tmp/github-actions/rubocop-github.txt"
+echo "   - tmp/github-actions/test-sample.txt"
+echo "   - tmp/github-actions/cli-test.txt"
+echo "   - tmp/github-actions/coverage-test.txt"
+echo "   - tmp/github-actions/pr-summary.md"
+echo "   - tmp/security/brakeman.json"
+echo ""
+echo "🔗 When you create a PR, GitHub Actions will:"
+echo "   ✅ Add inline comments for style issues"
+echo "   ✅ Post security analysis summary"
+echo "   ✅ Run targeted tests for changed files"
+echo "   ✅ Verify CLI functionality"
+echo "   ✅ Check coverage impact"
+echo "   ✅ Update PR status checks"

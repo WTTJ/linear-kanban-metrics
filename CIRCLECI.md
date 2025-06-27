@@ -49,11 +49,34 @@ bundle exec brakeman                 # Security analysis
    Add any required environment variables in CircleCI project settings:
    - `LINEAR_API_KEY` (for integration tests, if applicable)
 
-3. **Branch Protection** (recommended)
-   Configure GitHub branch protection rules:
-   - Require status checks to pass before merging
-   - Require branches to be up to date before merging
-   - Include administrators in restrictions
+## 🤝 Integration with GitHub Actions
+
+This project also includes GitHub Actions for immediate PR feedback that complement CircleCI:
+
+| Feature | GitHub Actions | CircleCI |
+|---------|---------------|----------|
+| **Trigger** | PR events (immediate) | All commits + nightly |
+| **Feedback** | Inline PR comments | Detailed artifacts |
+| **Speed** | Fast (< 2 min) | Comprehensive (5-10 min) |
+| **Focus** | Quick validation | Full pipeline |
+
+### GitHub Actions Features:
+- 🔍 **Inline code review** with RuboCop violations
+- 💬 **Automated PR comments** with security & quality summaries  
+- 🎯 **Targeted testing** for changed files only
+- 💨 **Smoke tests** for basic functionality
+- 📊 **Coverage impact** analysis
+
+See [`.github/ACTIONS.md`](.github/ACTIONS.md) for complete GitHub Actions documentation.
+
+### Local Testing:
+```bash
+# Test GitHub Actions workflow locally
+./bin/github-actions-test
+
+# Test CircleCI workflow locally  
+./bin/ci-local
+```
 
 ## 🎯 Quality Gates
 
