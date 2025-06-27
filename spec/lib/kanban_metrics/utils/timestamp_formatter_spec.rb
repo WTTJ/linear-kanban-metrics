@@ -270,7 +270,7 @@ RSpec.describe KanbanMetrics::Utils::TimestampFormatter do
         expect(instance.private_methods).to include(:to_iso)
         expect(instance.private_methods).to include(:to_display)
         expect(instance.private_methods).to include(:to_custom)
-        
+
         # But we can still call them from within the class
         expect(test_class.new.send(:to_iso, DateTime.new(2024, 1, 1))).to eq('2024-01-01T00:00:00Z')
       end

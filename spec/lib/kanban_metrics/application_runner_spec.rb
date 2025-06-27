@@ -155,8 +155,6 @@ RSpec.describe KanbanMetrics::ApplicationRunner do
     end
   end
 
-
-
   describe 'integration scenarios' do
     context 'with complete valid workflow' do
       let(:sample_issues) { [{ 'id' => 'issue-1', 'title' => 'Test Issue' }] }

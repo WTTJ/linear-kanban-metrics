@@ -48,8 +48,9 @@ RSpec.describe KanbanMetrics::Domain::Issue do
       it 'raises ArgumentError when data is not hash-like' do
         # Create an object that doesn't respond to []
         invalid_object = Object.new
-        def invalid_object.respond_to?(method, include_private = false)
+        def invalid_object.respond_to?(method, include_private: false)
           return false if method == :[]
+
           super
         end
 
