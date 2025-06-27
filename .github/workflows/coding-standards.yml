@@ -34,7 +34,7 @@ jobs:
           rubocop_version: gemfile
           rubocop_extensions: rubocop-rspec:gemfile rubocop-performance:gemfile rubocop-factory_bot:gemfile
           reporter: github-pr-review
-          fail_on_error: false
+          fail_level: none
           filter_mode: added
           rubocop_flags: '--display-cop-names --format github'
           

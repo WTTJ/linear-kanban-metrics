@@ -2,6 +2,17 @@
 
 This Ruby script collects kanban metrics from the Linear API, including cycle time, lead time, throughput, and work in progress (WIP).
 
+## 🤖 AI Code Review
+
+This project uses **GitHub Copilot** to automatically review all pull requests against our coding standards and design patterns. The AI system checks for:
+
+- Architecture adherence and design patterns
+- SOLID principles and Ruby best practices  
+- Testing quality and security considerations
+- Code maintainability and performance
+
+**📖 [Learn more about our AI Code Review system →](./AI_CODE_REVIEW.md)**
+
 ## Setup
 
 1. Install Ruby dependencies:
