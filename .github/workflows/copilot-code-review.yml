@@ -219,8 +219,36 @@ jobs:
               issues = []
               
               try:
+                  # First try to parse JSON results for more accurate failure detection
+                  try:
+                      with open('tmp/ai-review/rspec.json', 'r') as f:
+                          rspec_data = json.load(f)
+                          summary = rspec_data.get('summary', {})
+                          failure_count = summary.get('failure_count', 0)
+                          error_count = summary.get('error_count', 0)
+                          
+                          if failure_count > 0 or error_count > 0:
+                              issues.append({
+                                  'file': 'test_suite',
+                                  'line': 1,
+                                  'severity': 'error',
+                                  'message': f'Test failures detected: {failure_count} failures, {error_count} errors',
+                                  'type': 'testing'
+                              })
+                              return issues
+                  except (json.JSONDecodeError, FileNotFoundError, KeyError):
+                      # Fall back to text parsing if JSON parsing fails
+                      pass
+                  
+                  # Fallback: Parse text output for failure indicators
                   test_output = read_file_safe('tmp/ai-review/rspec.txt')
-                  if 'failure' in test_output.lower() or 'error' in test_output.lower():
+                  # Only flag as failure if we see actual RSpec failure indicators
+                  if any(indicator in test_output for indicator in [
+                      'failures', 'pending', 'FAILED', 'FAILURE:', 'Error:', 
+                      'examples, 1 failure', 'examples, 2 failures',
+                      'examples, 3 failures', 'examples, 4 failures',
+                      'examples, 5 failures', ' failures)'
+                  ]) and not '0 failures' in test_output:
                       issues.append({
                           'file': 'test_suite',
                           'line': 1,
