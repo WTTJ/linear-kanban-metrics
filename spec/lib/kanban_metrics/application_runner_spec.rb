@@ -85,6 +85,9 @@ RSpec.describe KanbanMetrics::ApplicationRunner do
     context 'with missing API token' do
       before do
         allow(ENV).to receive(:fetch).with('LINEAR_API_TOKEN', nil).and_return(nil)
+        allow(ENV).to receive(:fetch).with('LINEAR_TEAM_ID', nil).and_return(nil)
+        allow(ENV).to receive(:fetch).with('METRICS_START_DATE', nil).and_return(nil)
+        allow(ENV).to receive(:fetch).with('METRICS_END_DATE', nil).and_return(nil)
       end
 
       it 'exits with error message when token is nil' do
@@ -112,6 +115,9 @@ RSpec.describe KanbanMetrics::ApplicationRunner do
     context 'with empty API token' do
       before do
         allow(ENV).to receive(:fetch).with('LINEAR_API_TOKEN', nil).and_return('')
+        allow(ENV).to receive(:fetch).with('LINEAR_TEAM_ID', nil).and_return(nil)
+        allow(ENV).to receive(:fetch).with('METRICS_START_DATE', nil).and_return(nil)
+        allow(ENV).to receive(:fetch).with('METRICS_END_DATE', nil).and_return(nil)
       end
 
       it 'exits with error message when token is empty string' do
@@ -149,72 +155,7 @@ RSpec.describe KanbanMetrics::ApplicationRunner do
     end
   end
 
-  describe 'private methods' do
-    describe '#validate_api_token' do
-      subject(:validate_token) { runner.send(:validate_api_token) }
 
-      context 'with valid API token' do
-        before do
-          allow(ENV).to receive(:fetch).with('LINEAR_API_TOKEN', nil).and_return(api_token)
-        end
-
-        it 'does not raise any error' do
-          # Execute & Verify
-          expect { validate_token }.not_to raise_error
-        end
-
-        it 'returns silently' do
-          # Execute
-          result = validate_token
-
-          # Verify
-          expect(result).to be_nil
-        end
-      end
-
-      context 'with nil API token' do
-        before do
-          allow(ENV).to receive(:fetch).with('LINEAR_API_TOKEN', nil).and_return(nil)
-        end
-
-        it 'exits with error status' do
-          # Execute & Verify
-          expect { validate_token }.to raise_error(SystemExit)
-        end
-
-        it 'displays comprehensive error message' do
-          # Execute & Verify
-          expect { validate_token }
-            .to raise_error(SystemExit)
-            .and output(
-              %r{❌ LINEAR_API_TOKEN environment variable not set.*Please create a \.env file with your Linear API token.*Get your token from: https://linear\.app/settings/api}m
-            ).to_stdout
-        end
-      end
-
-      context 'with empty string API token' do
-        before do
-          allow(ENV).to receive(:fetch).with('LINEAR_API_TOKEN', nil).and_return('')
-        end
-
-        it 'treats empty string as invalid and exits' do
-          # Execute & Verify
-          expect { validate_token }.to raise_error(SystemExit)
-        end
-      end
-
-      context 'with whitespace-only API token' do
-        before do
-          allow(ENV).to receive(:fetch).with('LINEAR_API_TOKEN', nil).and_return('   ')
-        end
-
-        it 'treats whitespace-only as valid (truthy)' do
-          # Execute & Verify
-          expect { validate_token }.not_to raise_error
-        end
-      end
-    end
-  end
 
   describe 'integration scenarios' do
     context 'with complete valid workflow' do
