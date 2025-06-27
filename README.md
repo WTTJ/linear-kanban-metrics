@@ -291,3 +291,52 @@ Perfect for:
 - 📈 **Trend analysis** across individual tickets over time
 - 🔍 **Outlier detection** for tickets with unusual cycle/lead times
 - 📋 **Detailed reporting** with ticket-level granularity
+
+## Development
+
+### Testing & Quality Assurance
+
+This project maintains high code quality with comprehensive testing and automated checks:
+
+- **546 RSpec tests** with **91.17% code coverage**
+- **Zero RuboCop offenses** (style and quality checks)
+- **Brakeman security analysis** (no vulnerabilities found)
+
+```bash
+# Run tests
+bundle exec rspec
+
+# Run tests with coverage
+COVERAGE=true bundle exec rspec
+
+# Run code style checks
+bundle exec rubocop
+
+# Run security analysis
+bundle exec brakeman --force
+
+# Run all checks locally (like CI)
+./bin/ci-local
+```
+
+### Continuous Integration
+
+The project includes a comprehensive CircleCI configuration:
+
+- **Automated testing** on every commit
+- **Code coverage reporting** 
+- **Security scanning** with Brakeman
+- **Code quality checks** with RuboCop
+- **Nightly comprehensive audits**
+
+See [CIRCLECI.md](CIRCLECI.md) for detailed setup instructions and configuration details.
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Run tests locally: `./bin/ci-local`
+4. Commit your changes
+5. Push and create a pull request
+
+All pull requests must pass the CI pipeline before merging.
