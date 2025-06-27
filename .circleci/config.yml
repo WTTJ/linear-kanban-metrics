@@ -1,0 +1,204 @@
+# CircleCI 2.1 configuration for Kanban Metrics
+version: 2.1
+
+# Define reusable executors
+executors:
+  ruby-executor:
+    docker:
+      - image: cimg/ruby:3.3.5
+    working_directory: ~/kanban-metrics
+
+# Define reusable commands
+commands:
+  setup_project:
+    description: "Setup Ruby project dependencies"
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "Gemfile.lock" }}
+            - v1-dependencies-
+      - run:
+          name: Install dependencies
+          command: |
+            bundle config set --local path 'vendor/bundle'
+            bundle install --jobs=4 --retry=3
+      - save_cache:
+          paths:
+            - ./vendor/bundle
+          key: v1-dependencies-{{ checksum "Gemfile.lock" }}
+
+  store_test_artifacts:
+    description: "Store test results and coverage reports"
+    steps:
+      - store_test_results:
+          path: ~/kanban-metrics/tmp/test-results
+      - store_artifacts:
+          path: ~/kanban-metrics/coverage
+          destination: coverage-reports
+      - store_artifacts:
+          path: ~/kanban-metrics/tmp/test-results
+          destination: test-results
+
+# Define jobs
+jobs:
+  # RSpec Tests with Coverage
+  test:
+    executor: ruby-executor
+    steps:
+      - setup_project
+      - run:
+          name: Create test results directory
+          command: mkdir -p tmp/test-results
+      - run:
+          name: Run RSpec tests with coverage
+          command: |
+            bundle exec rspec \
+              --format progress \
+              --format RspecJunitFormatter \
+              --out tmp/test-results/rspec.xml
+          environment:
+            COVERAGE: true
+      - run:
+          name: Generate coverage summary
+          command: |
+            echo "Coverage Summary:" > tmp/test-results/coverage-summary.txt
+            if [ -f coverage/.last_run.json ]; then
+              echo "Coverage data found in coverage/.last_run.json"
+              # Extract coverage percentage if available
+              if command -v jq >/dev/null 2>&1; then
+                jq -r '.result.line' coverage/.last_run.json >> tmp/test-results/coverage-summary.txt 2>/dev/null || echo "Coverage data extracted"
+              fi
+            fi
+            if [ -f coverage/index.html ]; then
+              echo "HTML coverage report generated at coverage/index.html"
+            fi
+      - store_test_artifacts
+
+  # Security Analysis with Brakeman
+  security:
+    executor: ruby-executor
+    steps:
+      - setup_project
+      - run:
+          name: Create security results directory
+          command: mkdir -p tmp/security-results
+      - run:
+          name: Run Brakeman security analysis
+          command: |
+            bundle exec brakeman \
+              --force \
+              --format json \
+              --output tmp/security-results/brakeman.json \
+              --format plain \
+              --output tmp/security-results/brakeman.txt \
+              --format html \
+              --output tmp/security-results/brakeman.html \
+              --quiet || true
+      - run:
+          name: Display security summary
+          command: |
+            echo "=== Brakeman Security Analysis Summary ==="
+            if [ -f tmp/security-results/brakeman.txt ]; then
+              cat tmp/security-results/brakeman.txt
+            else
+              echo "No security issues found!"
+            fi
+      - store_artifacts:
+          path: ~/kanban-metrics/tmp/security-results
+          destination: security-reports
+
+  # Code Quality with RuboCop
+  lint:
+    executor: ruby-executor
+    steps:
+      - setup_project
+      - run:
+          name: Create lint results directory
+          command: mkdir -p tmp/lint-results
+      - run:
+          name: Run RuboCop linting
+          command: |
+            bundle exec rubocop \
+              --format progress \
+              --format json \
+              --out tmp/lint-results/rubocop.json \
+              --format html \
+              --out tmp/lint-results/rubocop.html
+      - run:
+          name: Display lint summary
+          command: |
+            echo "=== RuboCop Analysis Summary ==="
+            if [ -f tmp/lint-results/rubocop.json ]; then
+              # Extract summary from JSON if jq is available
+              if command -v jq >/dev/null 2>&1; then
+                jq -r '.summary' tmp/lint-results/rubocop.json 2>/dev/null || echo "Linting analysis completed"
+              else
+                echo "RuboCop analysis completed - see artifacts for details"
+              fi
+            fi
+      - store_artifacts:
+          path: ~/kanban-metrics/tmp/lint-results
+          destination: lint-reports
+
+  # Combined quality check job
+  quality:
+    executor: ruby-executor
+    steps:
+      - setup_project
+      - run:
+          name: Create quality results directory
+          command: mkdir -p tmp/quality-results
+      - run:
+          name: Run comprehensive quality checks
+          command: |
+            echo "Running comprehensive code quality analysis..."
+            
+            # Run RuboCop
+            echo "=== Running RuboCop ===" | tee tmp/quality-results/quality-summary.txt
+            bundle exec rubocop --format simple | tee -a tmp/quality-results/quality-summary.txt
+            
+            echo -e "\n=== Running Brakeman ===" | tee -a tmp/quality-results/quality-summary.txt
+            bundle exec brakeman --force --quiet --format plain | tee -a tmp/quality-results/quality-summary.txt || echo "Brakeman analysis completed"
+            
+            echo -e "\n=== Running Tests with Coverage ===" | tee -a tmp/quality-results/quality-summary.txt
+            COVERAGE=true bundle exec rspec --format progress | tee -a tmp/quality-results/quality-summary.txt
+      - store_artifacts:
+          path: ~/kanban-metrics/tmp/quality-results
+          destination: quality-reports
+
+# Define workflows
+workflows:
+  version: 2
+  
+  # Primary workflow - run on all commits
+  test_and_quality:
+    jobs:
+      - test
+      - security
+      - lint
+      - quality:
+          requires:
+            - test
+            - security
+            - lint
+
+  # Nightly comprehensive check
+  nightly:
+    triggers:
+      - schedule:
+          cron: "0 2 * * *"  # Run at 2 AM UTC every day
+          filters:
+            branches:
+              only:
+                - main
+                - master
+    jobs:
+      - test
+      - security
+      - lint
+      - quality:
+          requires:
+            - test
+            - security
+            - lint

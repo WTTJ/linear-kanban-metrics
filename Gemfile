@@ -19,6 +19,7 @@ group :development, :test do
   gem 'guard-rspec', '~> 4.7'
   gem 'guard-rubocop', '~> 1.5'
   gem 'rspec', '~> 3.12'
+  gem 'rspec_junit_formatter', '~> 0.6'
   gem 'rubocop', '~> 1.77'
   gem 'rubocop-factory_bot', '~> 2.0'
   gem 'rubocop-performance', '~> 1.12'
