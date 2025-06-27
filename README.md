@@ -317,17 +317,30 @@ bundle exec brakeman --force
 
 # Run all checks locally (like CI)
 ./bin/ci-local
+
+# Test GitHub Actions workflows locally
+./bin/github-actions-test
 ```
 
-### Continuous Integration
+### Continuous Integration & Pull Request Analysis
 
-The project includes a comprehensive CircleCI configuration:
+The project includes comprehensive CI/CD with both CircleCI and GitHub Actions:
 
+#### GitHub Actions (Immediate PR Feedback)
+- **🔍 Inline code review** with RuboCop violations in PR comments
+- **⚡ Fast feedback** (< 2 minutes) on pull requests
+- **🎯 Targeted testing** for changed files only
+- **💬 Automated summaries** for security and quality issues
+- **📊 Coverage impact** analysis
+
+#### CircleCI (Comprehensive Pipeline)
 - **Automated testing** on every commit
-- **Code coverage reporting** 
-- **Security scanning** with Brakeman
+- **Code coverage reporting** with detailed HTML reports
+- **Security scanning** with Brakeman (multiple formats)
 - **Code quality checks** with RuboCop
 - **Nightly comprehensive audits**
+
+See [`.github/ACTIONS.md`](.github/ACTIONS.md) and [CIRCLECI.md](CIRCLECI.md) for detailed setup instructions.
 
 See [CIRCLECI.md](CIRCLECI.md) for detailed setup instructions and configuration details.
 
