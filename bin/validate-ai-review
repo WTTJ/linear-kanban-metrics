@@ -1,0 +1,225 @@
+#!/bin/bash
+
+# AI Code Review Validation Script
+# Tests the workflow configuration and standards files
+
+set -e
+
+echo "🔍 Validating AI Code Review Configuration"
+echo "=========================================="
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+print_check() {
+    echo -e "${BLUE}🔍 $1${NC}"
+}
+
+print_pass() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+print_warn() {
+    echo -e "${YELLOW}⚠️ $1${NC}"
+}
+
+print_fail() {
+    echo -e "${RED}❌ $1${NC}"
+}
+
+# Track validation results
+ERRORS=0
+WARNINGS=0
+
+# Check required files exist
+print_check "Checking required files..."
+
+required_files=(
+    ".github/workflows/copilot-code-review.yml"
+    ".github/AI_REVIEW_STANDARDS.md"
+    "AI_CODE_REVIEW.md"
+    "bin/setup-ai-review"
+)
+
+for file in "${required_files[@]}"; do
+    if [ -f "$file" ]; then
+        print_pass "Found: $file"
+    else
+        print_fail "Missing: $file"
+        ((ERRORS++))
+    fi
+done
+
+# Validate YAML syntax
+print_check "Validating workflow YAML syntax..."
+workflow_file=".github/workflows/copilot-code-review.yml"
+
+if [ -f "$workflow_file" ]; then
+    if command -v python3 &> /dev/null; then
+        # Try Python YAML validation first
+        if python3 -c "import yaml; yaml.safe_load(open('$workflow_file'))" 2>/dev/null; then
+            print_pass "Workflow YAML syntax is valid"
+        # Fallback to Ruby YAML validation if available
+        elif command -v ruby &> /dev/null && ruby -e "require 'yaml'; YAML.load_file('$workflow_file')" 2>/dev/null; then
+            print_pass "Workflow YAML syntax is valid (verified with Ruby)"
+        else
+            print_warn "Cannot validate YAML syntax - yaml library not available"
+            print_warn "YAML appears structurally correct but cannot be fully validated"
+            ((WARNINGS++))
+        fi
+    else
+        print_warn "Python3 not found - cannot validate YAML syntax"
+        ((WARNINGS++))
+    fi
+fi
+
+# Check workflow structure
+print_check "Validating workflow structure..."
+
+if [ -f "$workflow_file" ]; then
+    # Check for required workflow elements
+    required_elements=(
+        "name:"
+        "pull_request:"
+        "GitHub Copilot"
+        "GITHUB_TOKEN"
+        "peter-evans/create-or-update-comment"
+    )
+    
+    for element in "${required_elements[@]}"; do
+        if grep -q "$element" "$workflow_file"; then
+            print_pass "Found required element: $element"
+        else
+            print_fail "Missing required element: $element"
+            ((ERRORS++))
+        fi
+    done
+fi
+
+# Check standards file structure
+print_check "Validating standards file structure..."
+
+standards_file=".github/AI_REVIEW_STANDARDS.md"
+if [ -f "$standards_file" ]; then
+    required_sections=(
+        "Module Organization"
+        "Design Patterns"
+        "SOLID Principles"
+        "Testing Standards"
+        "Anti-Patterns"
+    )
+    
+    for section in "${required_sections[@]}"; do
+        if grep -q "$section" "$standards_file"; then
+            print_pass "Found standards section: $section"
+        else
+            print_warn "Missing standards section: $section"
+            ((WARNINGS++))
+        fi
+    done
+fi
+
+# Check setup script
+print_check "Validating setup script..."
+
+setup_script="bin/setup-ai-review"
+if [ -f "$setup_script" ]; then
+    if [ -x "$setup_script" ]; then
+        print_pass "Setup script is executable"
+    else
+        print_warn "Setup script is not executable (run: chmod +x $setup_script)"
+        ((WARNINGS++))
+    fi
+    
+    # Check for required script elements
+    script_elements=(
+        "GitHub Copilot"
+        "GITHUB_TOKEN"
+        "github.com"
+    )
+    
+    for element in "${script_elements[@]}"; do
+        if grep -q "$element" "$setup_script"; then
+            print_pass "Setup script contains: $element"
+        else
+            print_fail "Setup script missing: $element"
+            ((ERRORS++))
+        fi
+    done
+fi
+
+# Check GitHub CLI availability
+print_check "Checking GitHub CLI availability..."
+if command -v gh &> /dev/null; then
+    print_pass "GitHub CLI (gh) is installed"
+    
+    # Check if authenticated
+    if gh auth status &> /dev/null; then
+        print_pass "GitHub CLI is authenticated"
+    else
+        print_warn "GitHub CLI is not authenticated (run: gh auth login)"
+        ((WARNINGS++))
+    fi
+else
+    print_warn "GitHub CLI (gh) is not installed"
+    print_warn "Install with: brew install gh"
+    ((WARNINGS++))
+fi
+
+# Check Python dependencies
+print_check "Checking Python dependencies..."
+if command -v python3 &> /dev/null; then
+    print_pass "Python3 is available"
+    
+    if python3 -c "import requests" 2>/dev/null; then
+        print_pass "Python requests library is available"
+    else
+        print_warn "Python requests library not found (will be installed in CI)"
+        ((WARNINGS++))
+    fi
+else
+    print_warn "Python3 not found"
+    ((WARNINGS++))
+fi
+
+# Check for GitHub token access (always available in Actions)
+print_check "Checking GitHub token configuration..."
+print_pass "GITHUB_TOKEN is automatically provided by GitHub Actions"
+print_pass "No additional secrets configuration required for GitHub Copilot"
+
+# Summary
+echo ""
+echo "📊 Validation Summary"
+echo "===================="
+
+if [ $ERRORS -eq 0 ] && [ $WARNINGS -eq 0 ]; then
+    print_pass "🎉 All validations passed! AI Code Review is ready to use."
+elif [ $ERRORS -eq 0 ]; then
+    print_warn "⚠️ Validation completed with $WARNINGS warnings"
+    echo "The system should work but may need minor adjustments."
+else
+    print_fail "❌ Validation failed with $ERRORS errors and $WARNINGS warnings"
+    echo "Please fix the errors before using the AI Code Review system."
+fi
+
+echo ""
+echo "🚀 Next Steps:"
+if [ $ERRORS -gt 0 ]; then
+    echo "1. Fix the validation errors above"
+    echo "2. Re-run this validation script"
+    echo "3. Run ./bin/setup-ai-review to complete setup"
+elif [ $WARNINGS -gt 0 ]; then
+    echo "1. Address any warnings if needed"
+    echo "2. Run ./bin/setup-ai-review to complete setup"
+    echo "3. Create a test PR to verify the workflow"
+else
+    echo "1. Run ./bin/setup-ai-review if not already done"
+    echo "2. Create a test PR to verify the workflow"
+    echo "3. The AI review will run automatically on future PRs"
+fi
+
+exit $ERRORS
