@@ -227,6 +227,6 @@ bundle exec rspec spec/lib/calculators/flow_efficiency_calculator_spec.rb
 # With profiling
 PROFILE=true bundle exec rspec
 
-# Using convenience script
-./scripts/test.sh --coverage --profile
+# Watch mode with Guard (auto-run tests on file changes)
+bundle exec guard
 ```
