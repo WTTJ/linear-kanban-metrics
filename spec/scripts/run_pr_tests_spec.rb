@@ -624,7 +624,7 @@ RSpec.describe 'PR Test Runner Script' do
     describe '#run_tests' do
       it 'warns when no spec files found for execution' do
         # Arrange - No files processed, so @spec_files will be nil/empty
-        
+
         # Act
         executor.run_tests
 
@@ -656,6 +656,11 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'executes rspec command successfully when tests pass' do
         # Arrange
+        runner_double = instance_double(Scripts::RSpecRunner)
+        allow(Scripts::RSpecRunner).to receive(:new).and_return(runner_double)
+        allow(runner_double).to receive(:call).and_return(true)
+
+        executor = described_class.new(config)
         allow(Scripts::SpecFileLocator).to receive(:find_spec_for)
           .with('lib/test.rb')
           .and_return('spec/lib/test_spec.rb')
@@ -663,7 +668,6 @@ RSpec.describe 'PR Test Runner Script' do
           .with('spec/lib/test_spec.rb')
           .and_return(true)
         allow(Scripts::TestEnvironmentValidator).to receive(:validate!)
-        allow_any_instance_of(Scripts::RSpecRunner).to receive(:call).and_return(true)
 
         # Act
         executor.process_files(['lib/test.rb'])
@@ -674,6 +678,12 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'raises TestFailureError when tests fail' do
         # Arrange
+        runner_double = instance_double(Scripts::RSpecRunner)
+        allow(Scripts::RSpecRunner).to receive(:new).and_return(runner_double)
+        allow(runner_double).to receive(:call)
+          .and_raise(Scripts::TestFailureError.new('Some tests failed'))
+
+        executor = described_class.new(config)
         allow(Scripts::SpecFileLocator).to receive(:find_spec_for)
           .with('lib/test.rb')
           .and_return('spec/lib/test_spec.rb')
@@ -681,8 +691,6 @@ RSpec.describe 'PR Test Runner Script' do
           .with('spec/lib/test_spec.rb')
           .and_return(true)
         allow(Scripts::TestEnvironmentValidator).to receive(:validate!)
-        allow_any_instance_of(Scripts::RSpecRunner).to receive(:call)
-          .and_raise(Scripts::TestFailureError.new('Some tests failed'))
 
         # Act
         executor.process_files(['lib/test.rb'])
