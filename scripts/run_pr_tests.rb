@@ -465,33 +465,24 @@ class DebugInfoProvider
   end
 end
 
-# Main application coordinator with enhanced error handling and logging
-class ApplicationRunner
-  def initialize
-    @config = nil
+# Coordinates the main workflow for the test runner application
+class TestRunnerWorkflow
+  def initialize(config)
+    @config = config
   end
 
-  def run(args = ARGV)
-    @config = parse_command_line_arguments(args)
+  def execute
     ensure_valid_git_environment!
 
     changed_files = detect_file_changes
     return handle_no_changes_scenario if changed_files.empty?
 
     execute_test_suite_for_changes(changed_files)
-  rescue TestRunnerError => e
-    handle_known_error(e)
-  rescue StandardError => e
-    handle_unexpected_error(e)
   end
 
   private
 
   attr_reader :config
-
-  def parse_command_line_arguments(args)
-    ArgumentParser.new.parse(args)
-  end
 
   def ensure_valid_git_environment!
     return if GitOperations.repository_exists?
@@ -515,6 +506,31 @@ class ApplicationRunner
     executor = TestExecutor.new(config)
     executor.process_files(changed_files)
     executor.run_tests
+  end
+end
+
+# Main application entry point with focused error handling responsibilities
+class ApplicationRunner
+  def initialize
+    @config = nil
+  end
+
+  def run(args = ARGV)
+    @config = parse_command_line_arguments(args)
+    workflow = TestRunnerWorkflow.new(@config)
+    workflow.execute
+  rescue TestRunnerError => e
+    handle_known_error(e)
+  rescue StandardError => e
+    handle_unexpected_error(e)
+  end
+
+  private
+
+  attr_reader :config
+
+  def parse_command_line_arguments(args)
+    ArgumentParser.new.parse(args)
   end
 
   def handle_known_error(error)

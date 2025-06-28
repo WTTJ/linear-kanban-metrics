@@ -847,6 +847,74 @@ RSpec.describe 'PR Test Runner Script' do
     end
   end
 
+  describe TestRunnerWorkflow do
+    subject(:workflow) { described_class.new(config) }
+
+    let(:config) { Configuration.new(base_branch: 'main', debug_mode: false) }
+
+    before do
+      allow(OutputFormatter).to receive(:error)
+      allow(OutputFormatter).to receive(:info)
+      allow(GitOperations).to receive(:repository_exists?).and_return(true)
+    end
+
+    describe '#execute' do
+      it 'validates git environment before proceeding' do
+        # Arrange
+        allow(GitOperations).to receive(:repository_exists?).and_return(false)
+
+        # Act & Assert
+        expect { workflow.execute }.to raise_error(
+          GitRepositoryError,
+          'Not in a git repository'
+        )
+      end
+
+      it 'detects file changes and processes them when files found' do
+        # Arrange
+        changed_files = ['lib/test.rb']
+        change_detector = instance_double(ChangeDetector, find_changed_files: changed_files)
+        test_executor = instance_double(TestExecutor, process_files: nil, run_tests: nil)
+
+        allow(ChangeDetector).to receive(:new).with(config).and_return(change_detector)
+        allow(TestExecutor).to receive(:new).with(config).and_return(test_executor)
+
+        # Act
+        workflow.execute
+
+        # Assert
+        expect(test_executor).to have_received(:process_files).with(changed_files)
+        expect(test_executor).to have_received(:run_tests)
+      end
+
+      it 'shows debug info and exits when no files found' do
+        # Arrange
+        change_detector = instance_double(ChangeDetector, find_changed_files: [])
+        debug_provider = instance_double(DebugInfoProvider, show_debug_info: nil)
+
+        allow(ChangeDetector).to receive(:new).with(config).and_return(change_detector)
+        allow(DebugInfoProvider).to receive(:new).with(config).and_return(debug_provider)
+
+        # Act & Assert
+        expect { workflow.execute }.to raise_error(SystemExit)
+        expect(debug_provider).to have_received(:show_debug_info)
+      end
+
+      it 'raises GitRepositoryError with context when not in git repo' do
+        # Arrange
+        allow(GitOperations).to receive(:repository_exists?).and_return(false)
+        allow(Dir).to receive(:pwd).and_return('/tmp/test')
+
+        # Act & Assert
+        expect { workflow.execute }.to raise_error do |error|
+          expect(error).to be_a(GitRepositoryError)
+          expect(error.message).to eq('Not in a git repository')
+          expect(error.context[:working_directory]).to eq('/tmp/test')
+        end
+      end
+    end
+  end
+
   describe ApplicationRunner do
     subject(:runner) { described_class.new }
 
@@ -855,53 +923,39 @@ RSpec.describe 'PR Test Runner Script' do
     end
 
     describe '#run' do
-      it 'parses arguments and validates environment successfully' do
+      it 'parses arguments and delegates to workflow successfully' do
         # Arrange
         config = Configuration.new
         argument_parser = instance_double(ArgumentParser, parse: config)
-        change_detector = instance_double(ChangeDetector, find_changed_files: [])
-        debug_provider = instance_double(DebugInfoProvider, show_debug_info: nil)
+        workflow = instance_double(TestRunnerWorkflow, execute: nil)
 
         allow(ArgumentParser).to receive(:new).and_return(argument_parser)
-        allow(GitOperations).to receive(:repository_exists?).and_return(true)
-        allow(ChangeDetector).to receive(:new).and_return(change_detector)
-        allow(DebugInfoProvider).to receive(:new).and_return(debug_provider)
-
-        # Act & Assert
-        expect { runner.run([]) }.to raise_error(SystemExit)
-      end
-
-      it 'raises SystemExit when not in git repository' do
-        # Arrange
-        config = Configuration.new
-        argument_parser = instance_double(ArgumentParser, parse: config)
-
-        allow(ArgumentParser).to receive(:new).and_return(argument_parser)
-        allow(GitOperations).to receive(:repository_exists?).and_return(false)
-
-        # Act & Assert
-        expect { runner.run([]) }.to raise_error(SystemExit)
-      end
-
-      it 'executes tests when changed files are found' do
-        # Arrange
-        config = Configuration.new
-        changed_files = ['lib/test.rb']
-        argument_parser = instance_double(ArgumentParser, parse: config)
-        change_detector = instance_double(ChangeDetector, find_changed_files: changed_files)
-        test_executor = instance_double(TestExecutor, process_files: nil, run_tests: nil)
-
-        allow(ArgumentParser).to receive(:new).and_return(argument_parser)
-        allow(GitOperations).to receive(:repository_exists?).and_return(true)
-        allow(ChangeDetector).to receive(:new).with(config).and_return(change_detector)
-        allow(TestExecutor).to receive(:new).with(config).and_return(test_executor)
+        allow(TestRunnerWorkflow).to receive(:new).with(config).and_return(workflow)
 
         # Act
         runner.run([])
 
         # Assert
-        expect(test_executor).to have_received(:process_files).with(changed_files)
-        expect(test_executor).to have_received(:run_tests)
+        expect(workflow).to have_received(:execute)
+      end
+
+      it 'handles TestRunnerError gracefully with error output' do
+        # Arrange
+        config = Configuration.new
+        argument_parser = instance_double(ArgumentParser, parse: config)
+        workflow = instance_double(TestRunnerWorkflow)
+
+        allow(ArgumentParser).to receive(:new).and_return(argument_parser)
+        allow(TestRunnerWorkflow).to receive(:new).with(config).and_return(workflow)
+        allow(workflow).to receive(:execute).and_raise(
+          TestRunnerError.new('test error', context: { key: 'value' })
+        )
+
+        # Act
+        expect { runner.run([]) }.to raise_error(SystemExit)
+
+        # Assert
+        expect(OutputFormatter).to have_received(:error).with('test error')
       end
 
       it 'handles unexpected errors gracefully with error output' do
@@ -913,6 +967,34 @@ RSpec.describe 'PR Test Runner Script' do
 
         # Assert
         expect(OutputFormatter).to have_received(:error).with('Unexpected error: test error')
+      end
+
+      it 'logs error context in debug mode for TestRunnerError' do
+        # Arrange
+        config = Configuration.new(debug_mode: true)
+        argument_parser = instance_double(ArgumentParser, parse: config)
+        workflow = instance_double(TestRunnerWorkflow)
+        error = TestRunnerError.new('test error', context: { key: 'value' })
+
+        allow(ArgumentParser).to receive(:new).and_return(argument_parser)
+        allow(TestRunnerWorkflow).to receive(:new).with(config).and_return(workflow)
+        allow(workflow).to receive(:execute).and_raise(error)
+
+        # Act & Assert
+        expect { runner.run([]) }.to output(/Debug context:/).to_stdout
+      end
+
+      it 'logs error details in debug mode for unexpected errors' do
+        # Arrange
+        config = Configuration.new(debug_mode: true)
+        argument_parser = instance_double(ArgumentParser, parse: config)
+        error = StandardError.new('test error')
+
+        allow(ArgumentParser).to receive(:new).and_return(argument_parser)
+        allow(TestRunnerWorkflow).to receive(:new).and_raise(error)
+
+        # Act & Assert
+        expect { runner.run([]) }.to output(/Debug information:/).to_stdout
       end
     end
   end
