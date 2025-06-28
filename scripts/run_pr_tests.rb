@@ -54,9 +54,10 @@ class Configuration
   def validate_branch_name!(branch_name)
     return branch_name if branch_name.is_a?(String) && !branch_name.strip.empty?
 
-    raise ArgumentParsingError,
-          'Branch name must be a non-empty string',
-          context: { provided_value: branch_name }
+    raise ArgumentParsingError.new(
+      'Branch name must be a non-empty string',
+      context: { provided_value: branch_name }
+    )
   end
 end
 
@@ -181,91 +182,86 @@ class SpecFileLocator
     end
 
     def find_spec_by_basename(basename)
-      return nil if basename.empty?
+      return nil if basename.nil? || basename.empty?
+      return nil if basename.include?('..') || basename.include?('/')
 
-      spec_pattern = File.join(SPEC_DIR, '**', "*#{basename}*_spec.rb")
-      Dir.glob(spec_pattern).first
+      sanitized_basename = basename.gsub(/[^a-zA-Z0-9_-]/, '')
+      return nil if sanitized_basename.empty?
+
+      spec_pattern = File.join(SPEC_DIR, '**', "*#{sanitized_basename}*_spec.rb")
+      candidates = Dir.glob(spec_pattern)
+
+      # Ensure the result is within the spec directory
+      candidates.find { |path| path.start_with?(SPEC_DIR + '/') }
     end
   end
 end
 
-# Responsible for finding changed files using multiple detection strategies
+# Responsible for finding changed files using different strategies
 class ChangeDetector
-  DETECTION_METHODS = %i[
-    branch_comparison
-    uncommitted_changes
-    staged_changes
-    last_commit_changes
-  ].freeze
-  private_constant :DETECTION_METHODS
-
   def initialize(config)
     @config = config
   end
 
   def find_changed_files
-    print_detection_status
-    detect_changes_using_fallback_methods
+    print_status_info
+    try_detection_methods || []
   end
 
   private
 
-  attr_reader :config
-
-  def print_detection_status
+  def print_status_info
     OutputFormatter.info("🔍 Current branch: #{GitOperations.current_branch}")
-    OutputFormatter.info("🔍 Comparing against: #{config.base_branch}")
+    OutputFormatter.info("🔍 Comparing against: #{@config.base_branch}")
   end
 
-  def detect_changes_using_fallback_methods
-    DETECTION_METHODS.each_with_index do |method_name, index|
-      files = send(method_name)
-      next if files.empty?
-
-      log_detection_success(method_name, files.size, index + 1)
-      return files
-    end
-
-    []
+  def try_detection_methods
+    branch_comparison || uncommitted_changes || staged_changes || last_commit_changes
   end
 
   def branch_comparison
-    return [] unless branch_comparison_viable?
+    return unless should_try_branch_comparison?
 
-    GitOperations.diff_files("#{config.base_branch}...HEAD")
+    files = GitOperations.diff_files("#{@config.base_branch}...HEAD")
+    return if files.empty?
+
+    OutputFormatter.success("📊 Method 1 - Branch comparison: Found #{files.size} files")
+    files
   end
 
-  def branch_comparison_viable?
+  def should_try_branch_comparison?
     current_branch = GitOperations.current_branch
-    current_branch != config.base_branch &&
+    current_branch != @config.base_branch &&
       current_branch != 'HEAD' &&
-      GitOperations.branch_exists?(config.base_branch)
+      GitOperations.branch_exists?(@config.base_branch)
   end
 
   def uncommitted_changes
-    GitOperations.diff_files('')
+    files = GitOperations.diff_files('')
+    return if files.empty?
+
+    OutputFormatter.success("📊 Method 2 - Uncommitted changes: Found #{files.size} files")
+    files
   end
 
   def staged_changes
-    GitOperations.diff_files('--cached')
+    files = GitOperations.diff_files('--cached')
+    return if files.empty?
+
+    OutputFormatter.success("📊 Method 3 - Staged changes: Found #{files.size} files")
+    files
   end
 
   def last_commit_changes
-    GitOperations.diff_files('HEAD~1')
-  end
+    files = GitOperations.diff_files('HEAD~1')
+    return if files.empty?
 
-  def log_detection_success(method_name, file_count, method_number)
-    method_label = format_method_label(method_name, method_number)
-    OutputFormatter.success("📊 #{method_label}: Found #{file_count} files")
-  end
-
-  def format_method_label(method_name, method_number)
-    formatted_name = method_name.to_s.tr('_', ' ').capitalize
-    "Method #{method_number} - #{formatted_name}"
+    OutputFormatter.success("📊 Method 4 - Last commit: Found #{files.size} files")
+    files
   end
 end
 
-# Handles test file processing and execution with improved error reporting
+# Handles test file processing and execution
 class TestExecutor
   def initialize(config)
     @config = config
@@ -273,101 +269,73 @@ class TestExecutor
   end
 
   def process_files(changed_files)
-    return if changed_files.empty?
+    OutputFormatter.info('📁 Changed files:')
+    changed_files.each { |file| puts "  #{file}" }
+    puts
 
-    display_changed_files(changed_files)
-    collect_spec_files_for_ruby_files(changed_files)
+    collect_spec_files(changed_files)
   end
 
   def run_tests
-    return display_no_specs_warning if @spec_files.empty?
+    return OutputFormatter.warning('No spec files found for changed Ruby files') if @spec_files.empty?
 
-    validate_test_environment!
-    execute_rspec_with_error_handling
+    validate_environment!
+    execute_rspec_command
   end
 
   private
 
-  attr_reader :config
+  def collect_spec_files(changed_files)
+    changed_files.each do |file|
+      next unless ruby_file?(file)
 
-  def display_changed_files(changed_files)
-    OutputFormatter.info('📁 Changed files:')
-    changed_files.each { |file| puts "  #{file}" }
-    puts
-  end
-
-  def collect_spec_files_for_ruby_files(changed_files)
-    ruby_files = changed_files.select { |file| ruby_file?(file) }
-    ruby_files.each { |file| process_single_ruby_file(file) }
+      process_ruby_file(file)
+    end
   end
 
   def ruby_file?(file)
     file.end_with?('.rb')
   end
 
-  def process_single_ruby_file(file)
+  def process_ruby_file(file)
     spec_file = SpecFileLocator.find_spec_for(file)
 
-    if spec_file
-      add_spec_file(spec_file, file)
+    if spec_file&.then { |f| File.exist?(f) }
+      @spec_files << spec_file
+      OutputFormatter.success("✅ Found spec: #{spec_file} for #{file}")
     else
-      log_missing_spec(file)
+      OutputFormatter.warning("⚠️  No spec found for: #{file}")
     end
   end
 
-  def add_spec_file(spec_file, source_file)
-    @spec_files << spec_file
-    OutputFormatter.success("✅ Found spec: #{spec_file} for #{source_file}")
+  def validate_environment!
+    return if system('which bundle >/dev/null 2>&1')
+
+    raise CommandNotFoundError.new(
+      'bundle command not found. Please install bundler.',
+      context: { command: 'bundle', suggestion: 'gem install bundler' }
+    )
   end
 
-  def log_missing_spec(file)
-    OutputFormatter.warning("⚠️  No spec found for: #{file}")
-  end
-
-  def display_no_specs_warning
-    OutputFormatter.warning('No spec files found for changed Ruby files')
-  end
-
-  def validate_test_environment!
-    return if bundler_available?
-
-    raise CommandNotFoundError,
-          'bundle command not found. Please install bundler.',
-          context: { command: 'bundle', suggestion: 'gem install bundler' }
-  end
-
-  def bundler_available?
-    system('which bundle >/dev/null 2>&1')
-  end
-
-  def execute_rspec_with_error_handling
+  def execute_rspec_command
     puts
     OutputFormatter.info('🧪 Running related tests...')
 
-    unique_spec_files = @spec_files.uniq.sort
-    command = build_rspec_command(unique_spec_files)
+    spec_files = @spec_files.uniq.sort
+    command = build_rspec_command(spec_files)
 
-    log_command_if_debug(command)
-    execute_command_or_raise(command)
+    debug_print("Running: #{command.join(' ')}")
+
+    success = system(*command)
+    raise TestFailureError.new('Some tests failed') unless success
   end
 
   def build_rspec_command(spec_files)
     %w[bundle exec rspec] + spec_files + %w[--format documentation]
   end
 
-  def log_command_if_debug(command)
-    return unless config.debug?
-
-    puts "Running: #{command.join(' ')}"
-  end
-
-  def execute_command_or_raise(command)
-    success = system(*command)
-    return if success
-
-    raise TestFailureError,
-          'Some tests failed',
-          context: { command: command.join(' '), spec_count: @spec_files.size }
+  def debug_print(message)
+    puts message if @config.debug?
   end
 end
 
@@ -392,52 +360,40 @@ class OutputFormatter
   end
 end
 
-# Handles command line argument parsing with comprehensive validation
+# Handles command line argument parsing
 class ArgumentParser
   def parse(args)
-    config_builder = ConfigurationBuilder.new
-    parser = create_option_parser(config_builder)
+    config = Configuration.new
+    show_help = false
 
-    remaining_args = parse_options_safely(parser, args)
-    base_branch = extract_base_branch(remaining_args)
+    parser = OptionParser.new do |opts|
+      opts.banner = usage_text
 
-    config_builder.build_with_base_branch(base_branch)
+      opts.on('-h', '--help', 'Show this help message') do
+        show_help = true
+      end
+
+      opts.on('-d', '--debug', 'Enable debug output') do
+        config = Configuration.new(base_branch: config.base_branch, debug_mode: true)
+      end
+    end
+
+    remaining_args = parser.parse(args)
+    base_branch = remaining_args.first || 'main'
+    config = Configuration.new(base_branch: base_branch, debug_mode: config.debug?)
+
+    if show_help
+      puts parser
+      exit 0
+    end
+
+    config
   rescue OptionParser::InvalidOption => e
-    raise ArgumentParsingError,
-          "Invalid option: #{e.message}",
-          context: { provided_args: args }
+    OutputFormatter.error("Invalid option: #{e.message}")
+    exit 1
   end
 
   private
-
-  def create_option_parser(config_builder)
-    OptionParser.new do |opts|
-      opts.banner = usage_text
-      setup_help_option(opts)
-      setup_debug_option(opts, config_builder)
-    end
-  end
-
-  def setup_help_option(opts)
-    opts.on('-h', '--help', 'Show this help message') do
-      puts opts
-      exit 0
-    end
-  end
-
-  def setup_debug_option(opts, config_builder)
-    opts.on('-d', '--debug', 'Enable debug output') do
-      config_builder.enable_debug
-    end
-  end
-
-  def parse_options_safely(parser, args)
-    parser.parse(args)
-  end
-
-  def extract_base_branch(remaining_args)
-    remaining_args.first || 'main'
-  end
 
   def usage_text
     <<~USAGE
@@ -464,22 +420,6 @@ class ArgumentParser
       4. Last commit changes
     USAGE
   end
-
-  # Helper class for building configuration objects
-  class ConfigurationBuilder
-    def initialize
-      @debug_mode = false
-    end
-
-    def enable_debug
-      @debug_mode = true
-    end
-
-    def build_with_base_branch(base_branch)
-      Configuration.new(base_branch: base_branch, debug_mode: @debug_mode)
-    end
-  end
-  private_constant :ConfigurationBuilder
 end
 
 # Provides debug information when no changes are found
@@ -556,9 +496,10 @@ class ApplicationRunner
   def ensure_valid_git_environment!
     return if GitOperations.repository_exists?
 
-    raise GitRepositoryError,
-          'Not in a git repository',
-          context: { working_directory: Dir.pwd }
+    raise GitRepositoryError.new(
+      'Not in a git repository',
+      context: { working_directory: Dir.pwd }
+    )
   end
 
   def detect_file_changes
