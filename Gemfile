@@ -4,9 +4,11 @@ source 'https://rubygems.org'
 
 ruby '~> 3.0'
 
+gem 'anthropic', '~> 0.3'
 gem 'csv', '~> 3.2'
 gem 'dotenv', '~> 2.8'
 gem 'json', '~> 2.6'
+gem 'octokit', '~> 5.0'
 gem 'terminal-table', '~> 3.0'
 gem 'zeitwerk', '~> 2.6'
 

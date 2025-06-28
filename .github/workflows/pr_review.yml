@@ -1,0 +1,40 @@
+name: 🧠 AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, edited]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 💎 Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3.5'
+          bundler-cache: true
+
+      - name: 📦 Install dependencies
+        run: |
+          bundle config set --local path 'vendor/bundle'
+          bundle install --jobs 4 --retry 3
+
+      - name: Run checks
+        run: |
+          mkdir -p reports
+          bundle exec rspec --format documentation > reports/rspec.txt || true
+          bundle exec rubocop --format simple > reports/rubocop.txt || true
+          brakeman --force -o reports/brakeman.txt || true
+
+      - name: Run AI Review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bundle exec ruby .github/scripts/pr_review.rb
