@@ -192,7 +192,7 @@ class SpecFileLocator
       candidates = Dir.glob(spec_pattern)
 
       # Ensure the result is within the spec directory
-      candidates.find { |path| path.start_with?(SPEC_DIR + '/') }
+      candidates.find { |path| path.start_with?("#{SPEC_DIR}/") }
     end
   end
 end
@@ -327,7 +327,7 @@ class TestExecutor
     debug_print("Running: #{command.join(' ')}")
 
     success = system(*command)
-    raise TestFailureError.new('Some tests failed') unless success
+    raise TestFailureError, 'Some tests failed' unless success
   end
 
   def build_rspec_command(spec_files)
