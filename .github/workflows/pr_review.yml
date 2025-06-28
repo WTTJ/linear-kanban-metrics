@@ -37,4 +37,4 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: ruby .github/scripts/pr_review.rb
+        run: bundle exec ruby .github/scripts/pr_review.rb
