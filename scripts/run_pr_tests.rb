@@ -10,7 +10,7 @@
 # Examples:
 #   ./scripts/run_pr_tests.rb              # Compare against main
 #   ./scripts/run_pr_tests.rb develop      # Compare against develop
-#   ./scripts/run_pr_tests.rb origin/main  # Compare against origin/main
+#   ./sripts/run_pr_tests.rb origin/main   # Compare against origin/main
 #
 
 require 'optparse'
@@ -122,73 +122,95 @@ module Scripts
   end
 
   # Strategy pattern for finding spec files with enhanced pattern matching
-  class SpecFileLocator
-    SPEC_DIR = 'spec'
-    private_constant :SPEC_DIR
-
+  module SpecFileMatching
     # File path patterns for different project structures
     PATTERNS = {
       lib: %r{^lib/(.+)\.rb$},
       app: %r{^app/(.+)\.rb$},
       github_scripts: %r{^\.github/scripts/(.+)\.rb$}
     }.freeze
-    private_constant :PATTERNS
 
     class << self
-      def find_spec_for(file_path)
-        return nil if file_path.nil? || !file_path.end_with?('.rb')
-
-        strategy = select_strategy_for(file_path)
-        strategy&.call(file_path)
-      end
-
-      private
-
-      def select_strategy_for(file_path)
+      def strategy_for(file_path)
         case file_path
-        when PATTERNS[:lib] then method(:handle_lib_file)
-        when PATTERNS[:app] then method(:handle_app_file)
-        when PATTERNS[:github_scripts] then method(:handle_github_scripts_file)
-        else method(:handle_generic_file)
+        when PATTERNS[:lib] then LibFileStrategy
+        when PATTERNS[:app] then AppFileStrategy
+        when PATTERNS[:github_scripts] then GitHubScriptsStrategy
+        else GenericFileStrategy
         end
       end
+    end
+  end
 
-      def handle_lib_file(file_path)
-        # lib/path/file.rb -> spec/lib/path/file_spec.rb
-        spec_path = "#{SPEC_DIR}/#{file_path.sub(/\.rb$/, '_spec.rb')}"
-        File.exist?(spec_path) ? spec_path : nil
+  # Strategy for handling lib files
+  class LibFileStrategy
+    SPEC_DIR = 'spec'
+    private_constant :SPEC_DIR
+
+    def self.find_spec_path(file_path)
+      # lib/path/file.rb -> spec/lib/path/file_spec.rb
+      spec_path = "#{SPEC_DIR}/#{file_path.sub(/\.rb$/, '_spec.rb')}"
+      File.exist?(spec_path) ? spec_path : nil
+    end
+  end
+
+  # Strategy for handling app files
+  class AppFileStrategy
+    SPEC_DIR = 'spec'
+    private_constant :SPEC_DIR
+
+    def self.find_spec_path(file_path)
+      # app/models/user.rb -> spec/models/user_spec.rb
+      match = file_path.match(SpecFileMatching::PATTERNS[:app])
+      return nil unless match
+
+      spec_path = "#{SPEC_DIR}/#{match[1]}_spec.rb"
+      File.exist?(spec_path) ? spec_path : nil
+    end
+  end
+
+  # Strategy for handling GitHub scripts files
+  class GitHubScriptsStrategy
+    SPEC_DIR = 'spec'
+    private_constant :SPEC_DIR
+
+    def self.find_spec_path(file_path)
+      # .github/scripts/pr_review.rb -> spec/github/scripts/pr_review_spec.rb
+      match = file_path.match(SpecFileMatching::PATTERNS[:github_scripts])
+      return nil unless match
+
+      spec_path = "#{SPEC_DIR}/github/scripts/#{match[1]}_spec.rb"
+      File.exist?(spec_path) ? spec_path : nil
+    end
+  end
+
+  # Strategy for handling generic files
+  class GenericFileStrategy
+    SPEC_DIR = 'spec'
+    private_constant :SPEC_DIR
+
+    def self.find_spec_path(file_path)
+      basename = File.basename(file_path, '.rb')
+      return nil if invalid_basename?(basename)
+
+      sanitized_basename = sanitize_basename(basename)
+      return nil if sanitized_basename.empty?
+
+      find_spec_by_pattern(sanitized_basename)
+    end
+
+    class << self
+      private
+
+      def invalid_basename?(basename)
+        basename.nil? || basename.empty? || basename.include?('..') || basename.include?('/')
       end
 
-      def handle_app_file(file_path)
-        # app/models/user.rb -> spec/models/user_spec.rb
-        match = file_path.match(PATTERNS[:app])
-        return nil unless match
-
-        spec_path = "#{SPEC_DIR}/#{match[1]}_spec.rb"
-        File.exist?(spec_path) ? spec_path : nil
+      def sanitize_basename(basename)
+        basename.gsub(/[^a-zA-Z0-9_-]/, '')
       end
 
-      def handle_github_scripts_file(file_path)
-        # .github/scripts/pr_review.rb -> spec/github/scripts/pr_review_spec.rb
-        match = file_path.match(PATTERNS[:github_scripts])
-        return nil unless match
-
-        spec_path = "#{SPEC_DIR}/github/scripts/#{match[1]}_spec.rb"
-        File.exist?(spec_path) ? spec_path : nil
-      end
-
-      def handle_generic_file(file_path)
-        basename = File.basename(file_path, '.rb')
-        find_spec_by_basename(basename)
-      end
-
-      def find_spec_by_basename(basename)
-        return nil if basename.nil? || basename.empty?
-        return nil if basename.include?('..') || basename.include?('/')
-
-        sanitized_basename = basename.gsub(/[^a-zA-Z0-9_-]/, '')
-        return nil if sanitized_basename.empty?
-
+      def find_spec_by_pattern(sanitized_basename)
         spec_pattern = File.join(SPEC_DIR, '**', "*#{sanitized_basename}*_spec.rb")
         candidates = Dir.glob(spec_pattern)
 
@@ -198,15 +220,105 @@ module Scripts
     end
   end
 
+  # Simplified locator that delegates to strategies
+  class SpecFileLocator
+    class << self
+      def find_spec_for(file_path)
+        return nil if file_path.nil? || !file_path.end_with?('.rb')
+
+        strategy = SpecFileMatching.strategy_for(file_path)
+        strategy.find_spec_path(file_path)
+      end
+    end
+  end
+
+  # Base class for change detection strategies
+  class ChangeDetectionStrategy
+    def initialize(config)
+      @config = config
+    end
+
+    def detect_changes
+      raise NotImplementedError, "#{self.class} must implement #detect_changes"
+    end
+
+    protected
+
+    attr_reader :config
+  end
+
+  # Strategy for detecting changes via branch comparison
+  class BranchComparisonStrategy < ChangeDetectionStrategy
+    def detect_changes
+      return [] unless applicable?
+
+      files = GitOperations.diff_files("#{config.base_branch}...HEAD")
+      return [] if files.empty?
+
+      OutputFormatter.success("📊 Branch comparison: Found #{files.size} files")
+      files
+    end
+
+    private
+
+    def applicable?
+      current_branch = GitOperations.current_branch
+      current_branch != config.base_branch &&
+        current_branch != 'HEAD' &&
+        GitOperations.branch_exists?(config.base_branch)
+    end
+  end
+
+  # Strategy for detecting uncommitted changes
+  class UncommittedChangesStrategy < ChangeDetectionStrategy
+    def detect_changes
+      files = GitOperations.diff_files('')
+      return [] if files.empty?
+
+      OutputFormatter.success("📊 Uncommitted changes: Found #{files.size} files")
+      files
+    end
+  end
+
+  # Strategy for detecting staged changes
+  class StagedChangesStrategy < ChangeDetectionStrategy
+    def detect_changes
+      files = GitOperations.diff_files('--cached')
+      return [] if files.empty?
+
+      OutputFormatter.success("📊 Staged changes: Found #{files.size} files")
+      files
+    end
+  end
+
+  # Strategy for detecting changes in the last commit
+  class LastCommitStrategy < ChangeDetectionStrategy
+    def detect_changes
+      files = GitOperations.diff_files('HEAD~1')
+      return [] if files.empty?
+
+      OutputFormatter.success("📊 Last commit: Found #{files.size} files")
+      files
+    end
+  end
+
   # Responsible for finding changed files using different strategies
   class ChangeDetector
+    DETECTION_STRATEGIES = [
+      BranchComparisonStrategy,
+      UncommittedChangesStrategy,
+      StagedChangesStrategy,
+      LastCommitStrategy
+    ].freeze
+    private_constant :DETECTION_STRATEGIES
+
     def initialize(config)
       @config = config
     end
 
     def find_changed_files
       print_status_info
-      try_detection_methods || []
+      try_detection_strategies || []
     end
 
     private
@@ -216,83 +328,39 @@ module Scripts
       OutputFormatter.info("🔍 Comparing against: #{@config.base_branch}")
     end
 
-    def try_detection_methods
-      branch_comparison || uncommitted_changes || staged_changes || last_commit_changes
-    end
+    def try_detection_strategies
+      DETECTION_STRATEGIES.each do |strategy_class|
+        strategy = strategy_class.new(@config)
+        files = strategy.detect_changes
+        return files unless files.empty?
+      end
 
-    def branch_comparison
-      return unless should_try_branch_comparison?
-
-      files = GitOperations.diff_files("#{@config.base_branch}...HEAD")
-      return if files.empty?
-
-      OutputFormatter.success("📊 Method 1 - Branch comparison: Found #{files.size} files")
-      files
-    end
-
-    def should_try_branch_comparison?
-      current_branch = GitOperations.current_branch
-      current_branch != @config.base_branch &&
-        current_branch != 'HEAD' &&
-        GitOperations.branch_exists?(@config.base_branch)
-    end
-
-    def uncommitted_changes
-      files = GitOperations.diff_files('')
-      return if files.empty?
-
-      OutputFormatter.success("📊 Method 2 - Uncommitted changes: Found #{files.size} files")
-      files
-    end
-
-    def staged_changes
-      files = GitOperations.diff_files('--cached')
-      return if files.empty?
-
-      OutputFormatter.success("📊 Method 3 - Staged changes: Found #{files.size} files")
-      files
-    end
-
-    def last_commit_changes
-      files = GitOperations.diff_files('HEAD~1')
-      return if files.empty?
-
-      OutputFormatter.success("📊 Method 4 - Last commit: Found #{files.size} files")
-      files
+      nil
     end
   end
 
-  # Handles test file processing and execution
-  class TestExecutor
+  # Service for processing files and collecting spec files
+  class SpecFileCollector
     def initialize(config)
       @config = config
       @spec_files = []
     end
 
-    def process_files(changed_files)
+    def collect_from(changed_files)
       OutputFormatter.info('📁 Changed files:')
       changed_files.each { |file| puts "  #{file}" }
       puts
 
-      collect_spec_files(changed_files)
-    end
-
-    def run_tests
-      return OutputFormatter.warning('No spec files found for changed Ruby files') if @spec_files.empty?
-
-      validate_environment!
-      execute_rspec_command
-    end
-
-    private
-
-    def collect_spec_files(changed_files)
       changed_files.each do |file|
         next unless ruby_file?(file)
 
         process_ruby_file(file)
       end
+
+      @spec_files.uniq.sort
     end
+
+    private
 
     def ruby_file?(file)
       file.end_with?('.rb')
@@ -308,8 +376,11 @@ module Scripts
         OutputFormatter.warning("⚠️  No spec found for: #{file}")
       end
     end
+  end
 
-    def validate_environment!
+  # Service for validating test environment
+  class TestEnvironmentValidator
+    def self.validate!
       return if system('which bundle >/dev/null 2>&1')
 
       raise CommandNotFoundError.new(
@@ -317,19 +388,30 @@ module Scripts
         context: { command: 'bundle', suggestion: 'gem install bundler' }
       )
     end
+  end
 
-    def execute_rspec_command
+  # Service for executing RSpec commands
+  class RSpecRunner
+    def initialize(config)
+      @config = config
+    end
+
+    def call(spec_files)
+      return false if spec_files.empty?
+
       puts
       OutputFormatter.info('🧪 Running related tests...')
 
-      spec_files = @spec_files.uniq.sort
       command = build_rspec_command(spec_files)
-
       debug_print("Running: #{command.join(' ')}")
 
       success = system(*command)
       raise TestFailureError, 'Some tests failed' unless success
+
+      true
     end
+
+    private
 
     def build_rspec_command(spec_files)
       %w[bundle exec rspec] + spec_files + %w[--format documentation]
@@ -338,6 +420,31 @@ module Scripts
     def debug_print(message)
       puts message if @config.debug?
     end
+  end
+
+  # Handles test file processing and execution coordination
+  class TestExecutor
+    def initialize(config)
+      @config = config
+      @collector = SpecFileCollector.new(config)
+      @runner = RSpecRunner.new(config)
+      @spec_files = []
+    end
+
+    def process_files(changed_files)
+      @spec_files = @collector.collect_from(changed_files)
+    end
+
+    def run_tests
+      return OutputFormatter.warning('No spec files found for changed Ruby files') if @spec_files.empty?
+
+      TestEnvironmentValidator.validate!
+      @runner.call(@spec_files)
+    end
+
+    private
+
+    attr_reader :spec_files
   end
 
   # Handles formatted output to terminal
@@ -361,34 +468,55 @@ module Scripts
     end
   end
 
+  # Service for building configuration from parsed arguments
+  class ConfigurationBuilder
+    def self.build_from_args(parsed_args, base_branch)
+      debug_mode = parsed_args[:debug] || false
+      Configuration.new(base_branch: base_branch, debug_mode: debug_mode)
+    end
+  end
+
   # Handles command line argument parsing
   class ArgumentParser
+    USAGE_TEXT = <<~USAGE
+      Usage: %<program_name>s [base_branch] [options]
+
+      Run RSpec tests for files changed in a PR or working directory.
+
+      Arguments:
+        base_branch    Branch to compare against (default: main)
+
+      Options:
+        --help, -h     Show this help message
+        --debug, -d    Enable debug output
+
+      Examples:
+        %<program_name>s                    # Compare against main
+        %<program_name>s develop            # Compare against develop
+        %<program_name>s origin/main        # Compare against origin/main
+
+      The script will automatically detect changes using multiple methods:
+      1. Branch comparison (for feature branches)
+      2. Uncommitted changes
+      3. Staged changes
+      4. Last commit changes
+    USAGE
+    private_constant :USAGE_TEXT
+
     def parse(args)
-      config = Configuration.new
+      options = {}
       show_help = false
 
-      parser = OptionParser.new do |opts|
-        opts.banner = usage_text
-
-        opts.on('-h', '--help', 'Show this help message') do
-          show_help = true
-        end
-
-        opts.on('-d', '--debug', 'Enable debug output') do
-          config = Configuration.new(base_branch: config.base_branch, debug_mode: true)
-        end
-      end
-
+      parser = create_option_parser(options) { show_help = true }
       remaining_args = parser.parse(args)
-      base_branch = remaining_args.first || 'main'
-      config = Configuration.new(base_branch: base_branch, debug_mode: config.debug?)
 
       if show_help
         puts parser
         exit 0
       end
 
-      config
+      base_branch = remaining_args.first || 'main'
+      ConfigurationBuilder.build_from_args(options, base_branch)
     rescue OptionParser::InvalidOption => e
       OutputFormatter.error("Invalid option: #{e.message}")
       exit 1
@@ -396,30 +524,33 @@ module Scripts
 
     private
 
+    def create_option_parser(options)
+      OptionParser.new do |opts|
+        opts.banner = usage_text
+
+        opts.on('-h', '--help', 'Show this help message') do
+          yield if block_given?
+        end
+
+        opts.on('-d', '--debug', 'Enable debug output') do
+          options[:debug] = true
+        end
+      end
+    end
+
     def usage_text
-      <<~USAGE
-        Usage: #{File.basename($PROGRAM_NAME)} [base_branch] [options]
+      format(USAGE_TEXT, program_name: File.basename($PROGRAM_NAME))
+    end
+  end
 
-        Run RSpec tests for files changed in a PR or working directory.
+  # Service for retrieving Git status information
+  class GitStatusService
+    def self.get_status_lines
+      status_output = `git status --porcelain 2>/dev/null`
+      return ['(git status failed)'] unless $CHILD_STATUS.exitstatus.zero?
 
-        Arguments:
-          base_branch    Branch to compare against (default: main)
-
-        Options:
-          --help, -h     Show this help message
-          --debug, -d    Enable debug output
-
-        Examples:
-          #{File.basename($PROGRAM_NAME)}                    # Compare against main
-          #{File.basename($PROGRAM_NAME)} develop            # Compare against develop
-          #{File.basename($PROGRAM_NAME)} origin/main        # Compare against origin/main
-
-        The script will automatically detect changes using multiple methods:
-        1. Branch comparison (for feature branches)
-        2. Uncommitted changes
-        3. Staged changes
-        4. Last commit changes
-      USAGE
+      status_lines = status_output.strip.split("\n")
+      status_lines.empty? ? ['(no changes)'] : status_lines
     end
   end
 
@@ -443,17 +574,8 @@ module Scripts
     private
 
     def show_git_status
-      status_output = `git status --porcelain 2>/dev/null`
-      if $CHILD_STATUS.exitstatus.zero?
-        status_lines = status_output.strip.split("\n")
-        if status_lines.empty?
-          puts '   (no changes)'
-        else
-          status_lines.each { |line| puts "   #{line}" }
-        end
-      else
-        puts '   (git status failed)'
-      end
+      status_lines = GitStatusService.get_status_lines
+      status_lines.each { |line| puts "   #{line}" }
     end
 
     def show_suggestions
@@ -510,28 +632,10 @@ module Scripts
     end
   end
 
-  # Main application entry point with focused error handling responsibilities
-  class ApplicationRunner
-    def initialize
-      @config = nil
-    end
-
-    def run(args = ARGV)
-      @config = parse_command_line_arguments(args)
-      workflow = TestRunnerWorkflow.new(@config)
-      workflow.execute
-    rescue TestRunnerError => e
-      handle_known_error(e)
-    rescue StandardError => e
-      handle_unexpected_error(e)
-    end
-
-    private
-
-    attr_reader :config
-
-    def parse_command_line_arguments(args)
-      ArgumentParser.new.parse(args)
+  # Handles formatted error reporting and program exit
+  class ErrorHandler
+    def initialize(config)
+      @config = config
     end
 
     def handle_known_error(error)
@@ -542,12 +646,14 @@ module Scripts
 
     def handle_unexpected_error(error)
       OutputFormatter.error("Unexpected error: #{error.message}")
-      log_unexpected_error_details(error) if config&.debug?
+      log_unexpected_error_details(error) if @config&.debug?
       exit 1
     end
 
+    private
+
     def log_error_context_if_debug(error)
-      return unless config&.debug? && error.context.any?
+      return unless @config&.debug? && error.context.any?
 
       puts "\nDebug context:"
       error.context.each { |key, value| puts "  #{key}: #{value}" }
@@ -558,6 +664,32 @@ module Scripts
       puts "  Error class: #{error.class}"
       puts '  Backtrace:'
       error.backtrace&.first(5)&.each { |line| puts "    #{line}" }
+    end
+  end
+
+  # Main application entry point with focused responsibilities
+  class ApplicationRunner
+    def initialize
+      @config = nil
+      @error_handler = nil
+    end
+
+    def run(args = ARGV)
+      @config = parse_command_line_arguments(args)
+      @error_handler = ErrorHandler.new(@config)
+
+      workflow = TestRunnerWorkflow.new(@config)
+      workflow.execute
+    rescue TestRunnerError => e
+      @error_handler.handle_known_error(e)
+    rescue StandardError => e
+      @error_handler.handle_unexpected_error(e)
+    end
+
+    private
+
+    def parse_command_line_arguments(args)
+      ArgumentParser.new.parse(args)
     end
   end
 end

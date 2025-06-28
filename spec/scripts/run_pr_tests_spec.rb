@@ -374,7 +374,7 @@ RSpec.describe 'PR Test Runner Script' do
       end
     end
 
-    describe '.find_spec_by_basename' do
+    describe '.find_spec_for with generic files' do
       it 'finds spec files by basename when they exist' do
         # Arrange
         allow(Dir).to receive(:glob)
@@ -382,7 +382,7 @@ RSpec.describe 'PR Test Runner Script' do
           .and_return(['spec/lib/calculator_spec.rb'])
 
         # Act
-        result = described_class.send(:find_spec_by_basename, 'calculator')
+        result = described_class.find_spec_for('calculator.rb')
 
         # Assert
         expect(result).to eq('spec/lib/calculator_spec.rb')
@@ -390,22 +390,22 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'returns nil for empty basename input' do
         # Act & Assert
-        expect(described_class.send(:find_spec_by_basename, '')).to be_nil
+        expect(described_class.find_spec_for('.rb')).to be_nil
       end
 
       it 'returns nil for nil basename input' do
         # Act & Assert
-        expect(described_class.send(:find_spec_by_basename, nil)).to be_nil
+        expect(described_class.find_spec_for(nil)).to be_nil
       end
 
       it 'prevents directory traversal attacks with parent directory references' do
         # Act & Assert
-        expect(described_class.send(:find_spec_by_basename, '../etc/passwd')).to be_nil
+        expect(described_class.find_spec_for('../etc/passwd.rb')).to be_nil
       end
 
       it 'prevents directory traversal attacks with path separators' do
         # Act & Assert
-        expect(described_class.send(:find_spec_by_basename, 'path/to/file')).to be_nil
+        expect(described_class.find_spec_for('path/to/file.rb')).to be_nil
       end
 
       it 'sanitizes special characters from basename' do
@@ -415,7 +415,7 @@ RSpec.describe 'PR Test Runner Script' do
           .and_return(['spec/lib/test_spec.rb'])
 
         # Act
-        result = described_class.send(:find_spec_by_basename, 'test!@#$%')
+        result = described_class.find_spec_for('test!@#$%.rb')
 
         # Assert
         expect(result).to eq('spec/lib/test_spec.rb')
@@ -423,7 +423,7 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'returns nil when sanitized basename becomes empty' do
         # Act & Assert
-        expect(described_class.send(:find_spec_by_basename, '!@#$%')).to be_nil
+        expect(described_class.find_spec_for('!@#$%.rb')).to be_nil
       end
 
       it 'ensures result path is within spec directory for security' do
@@ -432,7 +432,7 @@ RSpec.describe 'PR Test Runner Script' do
           .and_return(['../malicious_spec.rb', 'spec/lib/safe_spec.rb'])
 
         # Act
-        result = described_class.send(:find_spec_by_basename, 'test')
+        result = described_class.find_spec_for('test.rb')
 
         # Assert
         expect(result).to eq('spec/lib/safe_spec.rb')
@@ -457,9 +457,6 @@ RSpec.describe 'PR Test Runner Script' do
 
     describe '#find_changed_files' do
       it 'prints current branch status information' do
-        # Arrange
-        allow(detector).to receive(:try_detection_methods).and_return([])
-
         # Act
         detector.find_changed_files
 
@@ -468,9 +465,6 @@ RSpec.describe 'PR Test Runner Script' do
       end
 
       it 'prints base branch comparison information' do
-        # Arrange
-        allow(detector).to receive(:try_detection_methods).and_return([])
-
         # Act
         detector.find_changed_files
 
@@ -600,9 +594,8 @@ RSpec.describe 'PR Test Runner Script' do
         # Act
         executor.process_files(['lib/test.rb'])
 
-        # Assert
-        spec_files = executor.instance_variable_get(:@spec_files)
-        expect(spec_files).to include('spec/lib/test_spec.rb')
+        # Assert - Verify the success message is shown, indicating spec was found
+        expect(Scripts::OutputFormatter).to have_received(:success).with('✅ Found spec: spec/lib/test_spec.rb for lib/test.rb')
       end
 
       it 'warns when no spec file found for Ruby file' do
@@ -617,17 +610,21 @@ RSpec.describe 'PR Test Runner Script' do
       end
 
       it 'ignores non-Ruby files during processing' do
+        # Arrange
+        allow(Scripts::SpecFileLocator).to receive(:find_spec_for)
+
         # Act
         executor.process_files(['README.md', 'config.yml'])
 
-        # Assert
-        spec_files = executor.instance_variable_get(:@spec_files)
-        expect(spec_files).to be_empty
+        # Assert - No spec locator should be called for non-Ruby files
+        expect(Scripts::SpecFileLocator).not_to have_received(:find_spec_for)
       end
     end
 
     describe '#run_tests' do
       it 'warns when no spec files found for execution' do
+        # Arrange - No files processed, so @spec_files will be nil/empty
+        
         # Act
         executor.run_tests
 
@@ -638,10 +635,19 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'validates bundle command exists before running tests' do
         # Arrange
-        executor.instance_variable_set(:@spec_files, ['spec/test_spec.rb'])
-        allow(executor).to receive(:system).with('which bundle >/dev/null 2>&1').and_return(false)
+        allow(Scripts::SpecFileLocator).to receive(:find_spec_for)
+          .with('lib/test.rb')
+          .and_return('spec/lib/test_spec.rb')
+        allow(File).to receive(:exist?)
+          .with('spec/lib/test_spec.rb')
+          .and_return(true)
+        allow(Scripts::TestEnvironmentValidator).to receive(:validate!)
+          .and_raise(Scripts::CommandNotFoundError.new('bundle command not found. Please install bundler.'))
 
-        # Act & Assert
+        # Act
+        executor.process_files(['lib/test.rb'])
+
+        # Assert
         expect { executor.run_tests }.to raise_error(
           Scripts::CommandNotFoundError,
           'bundle command not found. Please install bundler.'
@@ -650,25 +656,38 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'executes rspec command successfully when tests pass' do
         # Arrange
-        executor.instance_variable_set(:@spec_files, ['spec/test_spec.rb'])
-        allow(executor).to receive(:system).with('which bundle >/dev/null 2>&1').and_return(true)
-        allow(executor).to receive(:system)
-          .with('bundle', 'exec', 'rspec', 'spec/test_spec.rb', '--format', 'documentation')
+        allow(Scripts::SpecFileLocator).to receive(:find_spec_for)
+          .with('lib/test.rb')
+          .and_return('spec/lib/test_spec.rb')
+        allow(File).to receive(:exist?)
+          .with('spec/lib/test_spec.rb')
           .and_return(true)
+        allow(Scripts::TestEnvironmentValidator).to receive(:validate!)
+        allow_any_instance_of(Scripts::RSpecRunner).to receive(:call).and_return(true)
 
-        # Act & Assert
+        # Act
+        executor.process_files(['lib/test.rb'])
+
+        # Assert
         expect { executor.run_tests }.not_to raise_error
       end
 
       it 'raises TestFailureError when tests fail' do
         # Arrange
-        executor.instance_variable_set(:@spec_files, ['spec/test_spec.rb'])
-        allow(executor).to receive(:system).with('which bundle >/dev/null 2>&1').and_return(true)
-        allow(executor).to receive(:system)
-          .with('bundle', 'exec', 'rspec', 'spec/test_spec.rb', '--format', 'documentation')
-          .and_return(false)
+        allow(Scripts::SpecFileLocator).to receive(:find_spec_for)
+          .with('lib/test.rb')
+          .and_return('spec/lib/test_spec.rb')
+        allow(File).to receive(:exist?)
+          .with('spec/lib/test_spec.rb')
+          .and_return(true)
+        allow(Scripts::TestEnvironmentValidator).to receive(:validate!)
+        allow_any_instance_of(Scripts::RSpecRunner).to receive(:call)
+          .and_raise(Scripts::TestFailureError.new('Some tests failed'))
 
-        # Act & Assert
+        # Act
+        executor.process_files(['lib/test.rb'])
+
+        # Assert
         expect { executor.run_tests }.to raise_error(Scripts::TestFailureError, 'Some tests failed')
       end
     end
