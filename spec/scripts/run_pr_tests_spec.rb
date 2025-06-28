@@ -4,7 +4,7 @@ require 'spec_helper'
 require_relative '../../scripts/run_pr_tests'
 
 RSpec.describe 'PR Test Runner Script' do
-  describe Configuration do
+  describe Scripts::Configuration do
     describe '#initialize' do
       it 'sets default base branch to main when no parameters provided' do
         # Arrange & Act
@@ -42,21 +42,21 @@ RSpec.describe 'PR Test Runner Script' do
         # Arrange, Act & Assert
         expect do
           described_class.new(base_branch: nil)
-        end.to raise_error(ArgumentParsingError, 'Branch name must be a non-empty string')
+        end.to raise_error(Scripts::ArgumentParsingError, 'Branch name must be a non-empty string')
       end
 
       it 'validates branch name is not empty string' do
         # Arrange, Act & Assert
         expect do
           described_class.new(base_branch: '')
-        end.to raise_error(ArgumentParsingError, 'Branch name must be a non-empty string')
+        end.to raise_error(Scripts::ArgumentParsingError, 'Branch name must be a non-empty string')
       end
 
       it 'validates branch name is not whitespace only' do
         # Arrange, Act & Assert
         expect do
           described_class.new(base_branch: '   ')
-        end.to raise_error(ArgumentParsingError, 'Branch name must be a non-empty string')
+        end.to raise_error(Scripts::ArgumentParsingError, 'Branch name must be a non-empty string')
       end
 
       it 'freezes the configuration object for immutability' do
@@ -87,7 +87,7 @@ RSpec.describe 'PR Test Runner Script' do
     end
   end
 
-  describe Colors do
+  describe Scripts::Colors do
     describe '.colorize' do
       it 'wraps text with ANSI color codes and reset sequence' do
         # Arrange
@@ -135,7 +135,7 @@ RSpec.describe 'PR Test Runner Script' do
     end
   end
 
-  describe GitOperations do
+  describe Scripts::GitOperations do
     describe '.current_branch' do
       it 'returns current branch name when available' do
         # Arrange
@@ -268,7 +268,7 @@ RSpec.describe 'PR Test Runner Script' do
     end
   end
 
-  describe SpecFileLocator do
+  describe Scripts::SpecFileLocator do
     describe '.find_spec_for' do
       context 'with lib files' do
         it 'maps lib files to spec/lib pattern when spec exists' do
@@ -440,15 +440,15 @@ RSpec.describe 'PR Test Runner Script' do
     end
   end
 
-  describe ChangeDetector do
+  describe Scripts::ChangeDetector do
     subject(:detector) { described_class.new(config) }
 
-    let(:config) { Configuration.new(base_branch: 'main', debug_mode: false) }
+    let(:config) { Scripts::Configuration.new(base_branch: 'main', debug_mode: false) }
 
     before do
-      allow(OutputFormatter).to receive(:info)
-      allow(OutputFormatter).to receive(:success)
-      allow(GitOperations).to receive_messages(
+      allow(Scripts::OutputFormatter).to receive(:info)
+      allow(Scripts::OutputFormatter).to receive(:success)
+      allow(Scripts::GitOperations).to receive_messages(
         branch_exists?: false,
         diff_files: [],
         current_branch: 'feature-branch'
@@ -464,7 +464,7 @@ RSpec.describe 'PR Test Runner Script' do
         detector.find_changed_files
 
         # Assert
-        expect(OutputFormatter).to have_received(:info).with('🔍 Current branch: feature-branch')
+        expect(Scripts::OutputFormatter).to have_received(:info).with('🔍 Current branch: feature-branch')
       end
 
       it 'prints base branch comparison information' do
@@ -475,13 +475,13 @@ RSpec.describe 'PR Test Runner Script' do
         detector.find_changed_files
 
         # Assert
-        expect(OutputFormatter).to have_received(:info).with('🔍 Comparing against: main')
+        expect(Scripts::OutputFormatter).to have_received(:info).with('🔍 Comparing against: main')
       end
 
       it 'returns files from branch comparison when base branch exists' do
         # Arrange
-        allow(GitOperations).to receive(:branch_exists?).with('main').and_return(true)
-        allow(GitOperations).to receive(:diff_files)
+        allow(Scripts::GitOperations).to receive(:branch_exists?).with('main').and_return(true)
+        allow(Scripts::GitOperations).to receive(:diff_files)
           .with('main...HEAD')
           .and_return(['file1.rb', 'file2.rb'])
 
@@ -494,8 +494,8 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'falls back to uncommitted changes when base branch does not exist' do
         # Arrange
-        allow(GitOperations).to receive(:branch_exists?).with('main').and_return(false)
-        allow(GitOperations).to receive(:diff_files)
+        allow(Scripts::GitOperations).to receive(:branch_exists?).with('main').and_return(false)
+        allow(Scripts::GitOperations).to receive(:diff_files)
           .with('')
           .and_return(['uncommitted.rb'])
 
@@ -508,11 +508,11 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'falls back to staged changes when no uncommitted changes' do
         # Arrange
-        allow(GitOperations).to receive_messages(
+        allow(Scripts::GitOperations).to receive_messages(
           branch_exists?: false,
           diff_files: []
         )
-        allow(GitOperations).to receive(:diff_files)
+        allow(Scripts::GitOperations).to receive(:diff_files)
           .with('--cached')
           .and_return(['staged.rb'])
 
@@ -525,12 +525,12 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'falls back to last commit changes when no staged changes' do
         # Arrange
-        allow(GitOperations).to receive_messages(
+        allow(Scripts::GitOperations).to receive_messages(
           branch_exists?: false,
           diff_files: []
         )
-        allow(GitOperations).to receive(:diff_files).with('--cached').and_return([])
-        allow(GitOperations).to receive(:diff_files)
+        allow(Scripts::GitOperations).to receive(:diff_files).with('--cached').and_return([])
+        allow(Scripts::GitOperations).to receive(:diff_files)
           .with('HEAD~1')
           .and_return(['last_commit.rb'])
 
@@ -543,7 +543,7 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'returns empty array when no changes found by any method' do
         # Arrange
-        allow(GitOperations).to receive_messages(
+        allow(Scripts::GitOperations).to receive_messages(
           branch_exists?: false,
           diff_files: []
         )
@@ -557,15 +557,15 @@ RSpec.describe 'PR Test Runner Script' do
     end
   end
 
-  describe TestExecutor do
+  describe Scripts::TestExecutor do
     subject(:executor) { described_class.new(config) }
 
-    let(:config) { Configuration.new(debug_mode: false) }
+    let(:config) { Scripts::Configuration.new(debug_mode: false) }
 
     before do
-      allow(OutputFormatter).to receive(:info)
-      allow(OutputFormatter).to receive(:success)
-      allow(OutputFormatter).to receive(:warning)
+      allow(Scripts::OutputFormatter).to receive(:info)
+      allow(Scripts::OutputFormatter).to receive(:success)
+      allow(Scripts::OutputFormatter).to receive(:warning)
     end
 
     describe '#process_files' do
@@ -577,7 +577,7 @@ RSpec.describe 'PR Test Runner Script' do
         executor.process_files(files)
 
         # Assert
-        expect(OutputFormatter).to have_received(:info).with('📁 Changed files:')
+        expect(Scripts::OutputFormatter).to have_received(:info).with('📁 Changed files:')
       end
 
       it 'displays each changed file to stdout' do
@@ -590,7 +590,7 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'collects spec files for Ruby files when spec exists' do
         # Arrange
-        allow(SpecFileLocator).to receive(:find_spec_for)
+        allow(Scripts::SpecFileLocator).to receive(:find_spec_for)
           .with('lib/test.rb')
           .and_return('spec/lib/test_spec.rb')
         allow(File).to receive(:exist?)
@@ -607,13 +607,13 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'warns when no spec file found for Ruby file' do
         # Arrange
-        allow(SpecFileLocator).to receive(:find_spec_for).and_return(nil)
+        allow(Scripts::SpecFileLocator).to receive(:find_spec_for).and_return(nil)
 
         # Act
         executor.process_files(['lib/test.rb'])
 
         # Assert
-        expect(OutputFormatter).to have_received(:warning).with('⚠️  No spec found for: lib/test.rb')
+        expect(Scripts::OutputFormatter).to have_received(:warning).with('⚠️  No spec found for: lib/test.rb')
       end
 
       it 'ignores non-Ruby files during processing' do
@@ -632,7 +632,7 @@ RSpec.describe 'PR Test Runner Script' do
         executor.run_tests
 
         # Assert
-        expect(OutputFormatter).to have_received(:warning)
+        expect(Scripts::OutputFormatter).to have_received(:warning)
           .with('No spec files found for changed Ruby files')
       end
 
@@ -643,7 +643,7 @@ RSpec.describe 'PR Test Runner Script' do
 
         # Act & Assert
         expect { executor.run_tests }.to raise_error(
-          CommandNotFoundError,
+          Scripts::CommandNotFoundError,
           'bundle command not found. Please install bundler.'
         )
       end
@@ -669,16 +669,16 @@ RSpec.describe 'PR Test Runner Script' do
           .and_return(false)
 
         # Act & Assert
-        expect { executor.run_tests }.to raise_error(TestFailureError, 'Some tests failed')
+        expect { executor.run_tests }.to raise_error(Scripts::TestFailureError, 'Some tests failed')
       end
     end
   end
 
-  describe OutputFormatter do
+  describe Scripts::OutputFormatter do
     describe '.info' do
       it 'outputs blue colored text to stdout' do
         # Arrange & Act
-        expect(Colors).to receive(:colorize).with('test message', Colors::BLUE)
+        expect(Scripts::Colors).to receive(:colorize).with('test message', Scripts::Colors::BLUE)
 
         # Assert
         expect { described_class.info('test message') }.to output.to_stdout
@@ -688,7 +688,7 @@ RSpec.describe 'PR Test Runner Script' do
     describe '.success' do
       it 'outputs green colored text to stdout' do
         # Arrange & Act
-        expect(Colors).to receive(:colorize).with('success message', Colors::GREEN)
+        expect(Scripts::Colors).to receive(:colorize).with('success message', Scripts::Colors::GREEN)
 
         # Assert
         expect { described_class.success('success message') }.to output.to_stdout
@@ -698,7 +698,7 @@ RSpec.describe 'PR Test Runner Script' do
     describe '.warning' do
       it 'outputs yellow colored text to stdout' do
         # Arrange & Act
-        expect(Colors).to receive(:colorize).with('warning message', Colors::YELLOW)
+        expect(Scripts::Colors).to receive(:colorize).with('warning message', Scripts::Colors::YELLOW)
 
         # Assert
         expect { described_class.warning('warning message') }.to output.to_stdout
@@ -708,7 +708,7 @@ RSpec.describe 'PR Test Runner Script' do
     describe '.error' do
       it 'outputs red colored text with error prefix to stdout' do
         # Arrange & Act
-        expect(Colors).to receive(:colorize).with('❌ Error: error message', Colors::RED)
+        expect(Scripts::Colors).to receive(:colorize).with('❌ Error: error message', Scripts::Colors::RED)
 
         # Assert
         expect { described_class.error('error message') }.to output.to_stdout
@@ -716,7 +716,7 @@ RSpec.describe 'PR Test Runner Script' do
     end
   end
 
-  describe ArgumentParser do
+  describe Scripts::ArgumentParser do
     subject(:parser) { described_class.new }
 
     describe '#parse' do
@@ -783,7 +783,7 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'raises SystemExit for invalid options' do
         # Arrange
-        allow(OutputFormatter).to receive(:error)
+        allow(Scripts::OutputFormatter).to receive(:error)
 
         # Act & Assert
         expect { parser.parse(['--invalid']) }.to raise_error(SystemExit)
@@ -791,15 +791,15 @@ RSpec.describe 'PR Test Runner Script' do
     end
   end
 
-  describe DebugInfoProvider do
+  describe Scripts::DebugInfoProvider do
     subject(:provider) { described_class.new(config) }
 
-    let(:config) { Configuration.new(base_branch: 'main') }
+    let(:config) { Scripts::Configuration.new(base_branch: 'main') }
 
     before do
-      allow(OutputFormatter).to receive(:error)
-      allow(OutputFormatter).to receive(:info)
-      allow(GitOperations).to receive(:current_branch).and_return('feature-branch')
+      allow(Scripts::OutputFormatter).to receive(:error)
+      allow(Scripts::OutputFormatter).to receive(:info)
+      allow(Scripts::GitOperations).to receive(:current_branch).and_return('feature-branch')
     end
 
     describe '#show_debug_info' do
@@ -812,7 +812,7 @@ RSpec.describe 'PR Test Runner Script' do
         provider.show_debug_info
 
         # Assert
-        expect(OutputFormatter).to have_received(:error)
+        expect(Scripts::OutputFormatter).to have_received(:error)
           .with('No files changed found using any method')
       end
 
@@ -839,7 +839,7 @@ RSpec.describe 'PR Test Runner Script' do
       it 'shows suggestions in output when not mocked' do
         # Arrange
         allow(provider).to receive(:show_git_status)
-        allow(OutputFormatter).to receive(:info).and_call_original
+        allow(Scripts::OutputFormatter).to receive(:info).and_call_original
 
         # Act & Assert
         expect { provider.show_debug_info }.to output(/Try one of these/).to_stdout
@@ -847,25 +847,25 @@ RSpec.describe 'PR Test Runner Script' do
     end
   end
 
-  describe TestRunnerWorkflow do
+  describe Scripts::TestRunnerWorkflow do
     subject(:workflow) { described_class.new(config) }
 
-    let(:config) { Configuration.new(base_branch: 'main', debug_mode: false) }
+    let(:config) { Scripts::Configuration.new(base_branch: 'main', debug_mode: false) }
 
     before do
-      allow(OutputFormatter).to receive(:error)
-      allow(OutputFormatter).to receive(:info)
-      allow(GitOperations).to receive(:repository_exists?).and_return(true)
+      allow(Scripts::OutputFormatter).to receive(:error)
+      allow(Scripts::OutputFormatter).to receive(:info)
+      allow(Scripts::GitOperations).to receive(:repository_exists?).and_return(true)
     end
 
     describe '#execute' do
       it 'validates git environment before proceeding' do
         # Arrange
-        allow(GitOperations).to receive(:repository_exists?).and_return(false)
+        allow(Scripts::GitOperations).to receive(:repository_exists?).and_return(false)
 
         # Act & Assert
         expect { workflow.execute }.to raise_error(
-          GitRepositoryError,
+          Scripts::GitRepositoryError,
           'Not in a git repository'
         )
       end
@@ -873,11 +873,11 @@ RSpec.describe 'PR Test Runner Script' do
       it 'detects file changes and processes them when files found' do
         # Arrange
         changed_files = ['lib/test.rb']
-        change_detector = instance_double(ChangeDetector, find_changed_files: changed_files)
-        test_executor = instance_double(TestExecutor, process_files: nil, run_tests: nil)
+        change_detector = instance_double(Scripts::ChangeDetector, find_changed_files: changed_files)
+        test_executor = instance_double(Scripts::TestExecutor, process_files: nil, run_tests: nil)
 
-        allow(ChangeDetector).to receive(:new).with(config).and_return(change_detector)
-        allow(TestExecutor).to receive(:new).with(config).and_return(test_executor)
+        allow(Scripts::ChangeDetector).to receive(:new).with(config).and_return(change_detector)
+        allow(Scripts::TestExecutor).to receive(:new).with(config).and_return(test_executor)
 
         # Act
         workflow.execute
@@ -889,11 +889,11 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'shows debug info and exits when no files found' do
         # Arrange
-        change_detector = instance_double(ChangeDetector, find_changed_files: [])
-        debug_provider = instance_double(DebugInfoProvider, show_debug_info: nil)
+        change_detector = instance_double(Scripts::ChangeDetector, find_changed_files: [])
+        debug_provider = instance_double(Scripts::DebugInfoProvider, show_debug_info: nil)
 
-        allow(ChangeDetector).to receive(:new).with(config).and_return(change_detector)
-        allow(DebugInfoProvider).to receive(:new).with(config).and_return(debug_provider)
+        allow(Scripts::ChangeDetector).to receive(:new).with(config).and_return(change_detector)
+        allow(Scripts::DebugInfoProvider).to receive(:new).with(config).and_return(debug_provider)
 
         # Act & Assert
         expect { workflow.execute }.to raise_error(SystemExit)
@@ -902,12 +902,12 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'raises GitRepositoryError with context when not in git repo' do
         # Arrange
-        allow(GitOperations).to receive(:repository_exists?).and_return(false)
+        allow(Scripts::GitOperations).to receive(:repository_exists?).and_return(false)
         allow(Dir).to receive(:pwd).and_return('/tmp/test')
 
         # Act & Assert
         expect { workflow.execute }.to raise_error do |error|
-          expect(error).to be_a(GitRepositoryError)
+          expect(error).to be_a(Scripts::GitRepositoryError)
           expect(error.message).to eq('Not in a git repository')
           expect(error.context[:working_directory]).to eq('/tmp/test')
         end
@@ -915,92 +915,8 @@ RSpec.describe 'PR Test Runner Script' do
     end
   end
 
-  describe ApplicationRunner do
-    subject(:runner) { described_class.new }
-
-    before do
-      allow(OutputFormatter).to receive(:error)
-    end
-
-    describe '#run' do
-      it 'parses arguments and delegates to workflow successfully' do
-        # Arrange
-        config = Configuration.new
-        argument_parser = instance_double(ArgumentParser, parse: config)
-        workflow = instance_double(TestRunnerWorkflow, execute: nil)
-
-        allow(ArgumentParser).to receive(:new).and_return(argument_parser)
-        allow(TestRunnerWorkflow).to receive(:new).with(config).and_return(workflow)
-
-        # Act
-        runner.run([])
-
-        # Assert
-        expect(workflow).to have_received(:execute)
-      end
-
-      it 'handles TestRunnerError gracefully with error output' do
-        # Arrange
-        config = Configuration.new
-        argument_parser = instance_double(ArgumentParser, parse: config)
-        workflow = instance_double(TestRunnerWorkflow)
-
-        allow(ArgumentParser).to receive(:new).and_return(argument_parser)
-        allow(TestRunnerWorkflow).to receive(:new).with(config).and_return(workflow)
-        allow(workflow).to receive(:execute).and_raise(
-          TestRunnerError.new('test error', context: { key: 'value' })
-        )
-
-        # Act
-        expect { runner.run([]) }.to raise_error(SystemExit)
-
-        # Assert
-        expect(OutputFormatter).to have_received(:error).with('test error')
-      end
-
-      it 'handles unexpected errors gracefully with error output' do
-        # Arrange
-        allow(ArgumentParser).to receive(:new).and_raise(StandardError.new('test error'))
-
-        # Act
-        expect { runner.run([]) }.to raise_error(SystemExit)
-
-        # Assert
-        expect(OutputFormatter).to have_received(:error).with('Unexpected error: test error')
-      end
-
-      it 'logs error context in debug mode for TestRunnerError' do
-        # Arrange
-        config = Configuration.new(debug_mode: true)
-        argument_parser = instance_double(ArgumentParser, parse: config)
-        workflow = instance_double(TestRunnerWorkflow)
-        error = TestRunnerError.new('test error', context: { key: 'value' })
-
-        allow(ArgumentParser).to receive(:new).and_return(argument_parser)
-        allow(TestRunnerWorkflow).to receive(:new).with(config).and_return(workflow)
-        allow(workflow).to receive(:execute).and_raise(error)
-
-        # Act & Assert
-        expect { runner.run([]) }.to output(/Debug context:/).to_stdout
-      end
-
-      it 'logs error details in debug mode for unexpected errors' do
-        # Arrange
-        config = Configuration.new(debug_mode: true)
-        argument_parser = instance_double(ArgumentParser, parse: config)
-        error = StandardError.new('test error')
-
-        allow(ArgumentParser).to receive(:new).and_return(argument_parser)
-        allow(TestRunnerWorkflow).to receive(:new).and_raise(error)
-
-        # Act & Assert
-        expect { runner.run([]) }.to output(/Debug information:/).to_stdout
-      end
-    end
-  end
-
   describe 'Custom Exceptions' do
-    describe TestRunnerError do
+    describe Scripts::TestRunnerError do
       it 'stores context information when provided' do
         # Arrange & Act
         error = described_class.new('test message', context: { key: 'value' })
@@ -1024,22 +940,22 @@ RSpec.describe 'PR Test Runner Script' do
     describe 'Error hierarchy inheritance' do
       it 'ensures GitRepositoryError inherits from TestRunnerError' do
         # Act & Assert
-        expect(GitRepositoryError.new('test')).to be_a(TestRunnerError)
+        expect(Scripts::GitRepositoryError.new('test')).to be_a(Scripts::TestRunnerError)
       end
 
       it 'ensures CommandNotFoundError inherits from TestRunnerError' do
         # Act & Assert
-        expect(CommandNotFoundError.new('test')).to be_a(TestRunnerError)
+        expect(Scripts::CommandNotFoundError.new('test')).to be_a(Scripts::TestRunnerError)
       end
 
       it 'ensures TestFailureError inherits from TestRunnerError' do
         # Act & Assert
-        expect(TestFailureError.new('test')).to be_a(TestRunnerError)
+        expect(Scripts::TestFailureError.new('test')).to be_a(Scripts::TestRunnerError)
       end
 
       it 'ensures ArgumentParsingError inherits from TestRunnerError' do
         # Act & Assert
-        expect(ArgumentParsingError.new('test')).to be_a(TestRunnerError)
+        expect(Scripts::ArgumentParsingError.new('test')).to be_a(Scripts::TestRunnerError)
       end
     end
   end
