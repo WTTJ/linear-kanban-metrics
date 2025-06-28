@@ -4,95 +4,153 @@ require 'spec_helper'
 require_relative '../../../.github/scripts/pr_review'
 
 RSpec.describe PullRequestReviewer do
+  # === TEST DATA SETUP ===
+  # === NAMED SUBJECTS ===
+  subject(:reviewer) { described_class.new }
+
   let(:github_client) { instance_double(Octokit::Client) }
-  let(:test_config) do
-    {
-      repo: 'test-user/test-repo',
-      pr_number: 123,
-      anthropic_api_key: 'test-key'
-    }
-  end
+  let(:valid_github_token) { 'test-token' }
+  let(:valid_repo) { 'test-user/test-repo' }
+  let(:valid_pr_number) { '123' }
+  let(:valid_anthropic_key) { 'test-key' }
+
+  let(:test_guidelines) { 'Test coding standards' }
+  let(:test_rspec_results) { 'All tests pass' }
+  let(:test_rubocop_results) { 'No offenses' }
+  let(:test_brakeman_results) { 'No warnings' }
+  let(:test_pr_diff) { 'Test PR diff' }
+  let(:test_prompt_template) { 'Test template {{guidelines}}' }
 
   before do
-    # Set up test environment variables
-    allow(ENV).to receive(:fetch).with('GITHUB_TOKEN', nil).and_return('test-token')
-    allow(ENV).to receive(:fetch).with('GITHUB_REPOSITORY', nil).and_return('test-user/test-repo')
-    allow(ENV).to receive(:fetch).with('PR_NUMBER', '0').and_return('123')
-    allow(ENV).to receive(:fetch).with('ANTHROPIC_API_KEY', nil).and_return('test-key')
-    allow(ENV).to receive(:[]).with('DEBUG').and_return(nil)
+    # Arrange - Set up valid test environment
+    setup_valid_environment
+    setup_github_client_mock
+  end
 
-    # Mock Octokit client
+  def setup_valid_environment
+    allow(ENV).to receive(:fetch).with('GITHUB_TOKEN', nil).and_return(valid_github_token)
+    allow(ENV).to receive(:fetch).with('GITHUB_REPOSITORY', nil).and_return(valid_repo)
+    allow(ENV).to receive(:fetch).with('PR_NUMBER', '0').and_return(valid_pr_number)
+    allow(ENV).to receive(:fetch).with('ANTHROPIC_API_KEY', nil).and_return(valid_anthropic_key)
+    allow(ENV).to receive(:[]).with('DEBUG').and_return(nil)
+  end
+
+  def setup_github_client_mock
     allow(Octokit::Client).to receive(:new).and_return(github_client)
   end
 
   describe '#initialize' do
-    it 'creates a reviewer instance with valid configuration' do
-      reviewer = described_class.new
-      expect(reviewer).to be_an_instance_of(described_class)
+    context 'with valid configuration' do
+      it 'creates a reviewer instance successfully' do
+        # Act & Assert
+        expect(reviewer).to be_an_instance_of(described_class)
+      end
     end
 
-    context 'with missing environment variables' do
+    context 'with missing GITHUB_TOKEN' do
       before do
+        # Arrange - Remove GITHUB_TOKEN
         allow(ENV).to receive(:fetch).with('GITHUB_TOKEN', nil).and_return(nil)
       end
 
-      it 'raises an error for missing GITHUB_TOKEN' do
+      it 'raises descriptive error message' do
+        # Act & Assert
         expect { described_class.new }.to raise_error('GITHUB_TOKEN environment variable is required')
       end
     end
 
     context 'with invalid PR number' do
       before do
+        # Arrange - Set invalid PR number
         allow(ENV).to receive(:fetch).with('PR_NUMBER', '0').and_return('0')
       end
 
-      it 'raises an error for invalid PR_NUMBER' do
+      it 'raises ArgumentError with validation message' do
+        # Act & Assert
         expect { described_class.new }.to raise_error(ArgumentError, /Invalid configuration.*PR_NUMBER must be a positive integer/)
       end
     end
   end
 
   describe '#gather_review_data' do
-    let(:reviewer) { described_class.new }
+    subject(:review_data) { reviewer.send(:gather_review_data) }
 
     before do
-      # Create test files
+      # Arrange - Setup file system mocks
+      setup_file_mocks
+      setup_github_api_mock
+    end
+
+    def setup_file_mocks
       allow(File).to receive(:exist?).and_return(true)
-      allow(File).to receive(:read).with('doc/CODING_STANDARDS.md').and_return('Test coding standards')
-      allow(File).to receive(:read).with('reports/rspec.txt').and_return('All tests pass')
-      allow(File).to receive(:read).with('reports/rubocop.txt').and_return('No offenses')
-      allow(File).to receive(:read).with('reports/brakeman.txt').and_return('No warnings')
-      allow(File).to receive(:read).with('.github/scripts/pr_review_prompt_template.md').and_return('Test template {{guidelines}}')
-
-      # Mock GitHub API call
-      allow(github_client).to receive(:pull_request).and_return('Test PR diff')
+      setup_coding_standards_mock
+      setup_report_file_mocks
+      setup_prompt_template_mock
     end
 
-    it 'gathers all required review data' do
-      data = reviewer.send(:gather_review_data)
-
-      expect(data).to include(
-        guidelines: 'Test coding standards',
-        rspec_results: 'All tests pass',
-        rubocop_results: 'No offenses',
-        brakeman_results: 'No warnings',
-        pr_diff: 'Test PR diff',
-        prompt_template: 'Test template {{guidelines}}'
-      )
+    def setup_coding_standards_mock
+      allow(File).to receive(:read).with('doc/CODING_STANDARDS.md').and_return(test_guidelines)
     end
 
-    it 'handles missing files gracefully' do
-      allow(File).to receive(:exist?).and_return(false)
+    def setup_report_file_mocks
+      allow(File).to receive(:read).with('reports/rspec.txt').and_return(test_rspec_results)
+      allow(File).to receive(:read).with('reports/rubocop.txt').and_return(test_rubocop_results)
+      allow(File).to receive(:read).with('reports/brakeman.txt').and_return(test_brakeman_results)
+    end
 
-      data = reviewer.send(:gather_review_data)
+    def setup_prompt_template_mock
+      allow(File).to receive(:read)
+        .with('.github/scripts/pr_review_prompt_template.md')
+        .and_return(test_prompt_template)
+    end
 
-      expect(data[:guidelines]).to eq('Not available.')
-      expect(data[:rspec_results]).to eq('Not available.')
+    def setup_github_api_mock
+      allow(github_client).to receive(:pull_request).and_return(test_pr_diff)
+    end
+
+    context 'with all files available' do
+      it 'returns complete review data structure', :aggregate_failures do
+        # Act & Assert
+        expect(review_data).to include(
+          guidelines: test_guidelines,
+          rspec_results: test_rspec_results,
+          rubocop_results: test_rubocop_results,
+          brakeman_results: test_brakeman_results,
+          pr_diff: test_pr_diff,
+          prompt_template: test_prompt_template
+        )
+      end
+    end
+
+    context 'with missing files' do
+      before do
+        # Arrange - Simulate missing files
+        allow(File).to receive(:exist?).and_return(false)
+      end
+
+      it 'provides fallback content for missing files', :aggregate_failures do
+        # Act & Assert
+        expect(review_data[:guidelines]).to eq('Not available.')
+        expect(review_data[:rspec_results]).to eq('Not available.')
+      end
+    end
+
+    context 'with GitHub API failure' do
+      before do
+        # Arrange - Simulate API failure
+        allow(github_client).to receive(:pull_request).and_raise(StandardError, 'API Error')
+      end
+
+      it 'handles API errors gracefully' do
+        # Act & Assert
+        expect(review_data[:pr_diff]).to eq('PR diff not available.')
+      end
     end
   end
 
   describe '#build_claude_prompt' do
-    let(:reviewer) { described_class.new }
+    subject(:prompt) { reviewer.send(:build_claude_prompt, review_data) }
+
     let(:review_data) do
       {
         prompt_template: 'Guidelines: {{guidelines}}\nRSpec: {{rspec_results}}',
@@ -104,9 +162,8 @@ RSpec.describe PullRequestReviewer do
       }
     end
 
-    it 'replaces template placeholders with actual data' do
-      prompt = reviewer.send(:build_claude_prompt, review_data)
-
+    it 'replaces all template placeholders', :aggregate_failures do
+      # Act & Assert
       expect(prompt).to include('Guidelines: Test guidelines')
       expect(prompt).to include('RSpec: Test results')
       expect(prompt).not_to include('{{')
@@ -114,101 +171,125 @@ RSpec.describe PullRequestReviewer do
   end
 
   describe '#safe_read_file' do
-    let(:reviewer) { described_class.new }
+    subject(:file_content) do
+      if custom_fallback
+        reviewer.send(:safe_read_file, file_path, custom_fallback)
+      else
+        reviewer.send(:safe_read_file, file_path)
+      end
+    end
 
-    context 'when file exists' do
+    let(:file_path) { 'test_file.txt' }
+    let(:custom_fallback) { nil }
+
+    context 'when file exists and is readable' do
       before do
-        allow(File).to receive(:exist?).with('test_file.txt').and_return(true)
-        allow(File).to receive(:read).with('test_file.txt').and_return('file content')
+        # Arrange - Setup successful file read
+        allow(File).to receive(:exist?).with(file_path).and_return(true)
+        allow(File).to receive(:read).with(file_path).and_return('file content')
       end
 
-      it 'returns file content' do
-        result = reviewer.send(:safe_read_file, 'test_file.txt')
-        expect(result).to eq('file content')
+      it 'returns the file content' do
+        # Act & Assert
+        expect(file_content).to eq('file content')
       end
     end
 
     context 'when file does not exist' do
       before do
-        allow(File).to receive(:exist?).with('missing_file.txt').and_return(false)
+        # Arrange - Simulate missing file
+        allow(File).to receive(:exist?).with(file_path).and_return(false)
       end
 
-      it 'returns fallback message' do
-        result = reviewer.send(:safe_read_file, 'missing_file.txt')
-        expect(result).to eq('Not available.')
+      it 'returns default fallback message' do
+        # Act & Assert
+        expect(file_content).to eq('Not available.')
       end
 
-      it 'returns custom fallback when provided' do
-        result = reviewer.send(:safe_read_file, 'missing_file.txt', 'Custom fallback')
-        expect(result).to eq('Custom fallback')
+      context 'with custom fallback' do
+        let(:custom_fallback) { 'Custom fallback' }
+
+        it 'returns the custom fallback message' do
+          # Act & Assert
+          expect(file_content).to eq('Custom fallback')
+        end
       end
     end
 
     context 'when file read raises an error' do
       before do
-        allow(File).to receive(:exist?).with('error_file.txt').and_return(true)
-        allow(File).to receive(:read).with('error_file.txt').and_raise(StandardError, 'Permission denied')
+        # Arrange - Simulate file read error
+        allow(File).to receive(:exist?).with(file_path).and_return(true)
+        allow(File).to receive(:read).with(file_path).and_raise(StandardError, 'Permission denied')
       end
 
-      it 'returns fallback message' do
-        result = reviewer.send(:safe_read_file, 'error_file.txt')
-        expect(result).to eq('Not available.')
+      it 'handles errors gracefully and returns fallback' do
+        # Act & Assert
+        expect(file_content).to eq('Not available.')
       end
     end
   end
 
   describe '#format_github_comment' do
-    let(:reviewer) { described_class.new }
+    subject(:formatted_comment) { reviewer.send(:format_github_comment, review_content) }
+
     let(:review_content) { 'This is a test review' }
+    let(:freeze_time) { Time.parse('2025-06-28 10:00:00 UTC') }
 
-    it 'formats the review content with proper structure' do
-      comment = reviewer.send(:format_github_comment, review_content)
-
-      expect(comment).to include('## 🤖 AI Code Review')
-      expect(comment).to include(review_content)
-      expect(comment).to include('Review generated by Claude 4 Sonnet at')
+    before do
+      # Arrange - Freeze time for consistent testing
+      allow(Time).to receive(:now).and_return(freeze_time)
     end
 
-    it 'includes a timestamp' do
-      freeze_time = Time.parse('2025-06-28 10:00:00 UTC')
-      allow(Time).to receive(:now).and_return(freeze_time)
+    it 'includes all required comment components', :aggregate_failures do
+      # Act & Assert
+      expect(formatted_comment).to include(review_content)
+      expect(formatted_comment).to include('Review generated by Claude')
+      expect(formatted_comment).to include('---')
+    end
 
-      comment = reviewer.send(:format_github_comment, review_content)
-
-      expect(comment).to include('2025-06-28 10:00:00 UTC')
+    it 'includes the correct timestamp' do
+      # Act & Assert
+      expect(formatted_comment).to include('2025-06-28 10:00:00 UTC')
     end
   end
 
   describe 'configuration validation' do
-    context 'with all required environment variables' do
-      it 'passes validation' do
+    context 'with complete valid configuration' do
+      it 'passes all validation checks' do
+        # Act & Assert
         expect { described_class.new }.not_to raise_error
       end
     end
 
     context 'with missing ANTHROPIC_API_KEY' do
       before do
+        # Arrange - Remove required API key
         allow(ENV).to receive(:fetch).with('ANTHROPIC_API_KEY', nil).and_return(nil)
       end
 
-      it 'raises ArgumentError' do
+      it 'raises descriptive validation error' do
+        # Act & Assert
         expect { described_class.new }.to raise_error(ArgumentError, /ANTHROPIC_API_KEY environment variable is required/)
       end
     end
 
     context 'with empty GITHUB_REPOSITORY' do
       before do
+        # Arrange - Set empty repository name
         allow(ENV).to receive(:fetch).with('GITHUB_REPOSITORY', nil).and_return('')
       end
 
-      it 'raises ArgumentError' do
+      it 'raises descriptive validation error' do
+        # Act & Assert
         expect { described_class.new }.to raise_error(ArgumentError, /GITHUB_REPOSITORY environment variable is required/)
       end
     end
   end
 
-  describe 'constants' do
-    it 'defines API configuration constants' do
+  describe 'API configuration constants' do
+    it 'defines correct API version and model', :aggregate_failures do
+      # Act & Assert
       expect(described_class::API_VERSION).to eq('2023-06-01')
       expect(described_class::CLAUDE_MODEL).to eq('claude-opus-4-20250514')
       expect(described_class::MAX_TOKENS).to eq(4096)

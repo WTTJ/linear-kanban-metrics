@@ -29,7 +29,7 @@ jobs:
           mkdir -p reports
           bundle exec rspec --format documentation > reports/rspec.txt || true
           bundle exec rubocop --format simple > reports/rubocop.txt || true
-          brakeman -o reports/brakeman.txt || true
+          brakeman --force -o reports/brakeman.txt || true
 
       - name: Run AI Review
         env:

@@ -201,8 +201,6 @@ class PullRequestReviewer
     timestamp = Time.now.strftime('%Y-%m-%d %H:%M:%S UTC')
 
     <<~COMMENT
-      ## 🤖 AI Code Review
-
       #{review_content}
 
       ---
