@@ -18,6 +18,7 @@ group :development, :test do
   gem 'guard', '~> 2.18'
   gem 'guard-rspec', '~> 4.7'
   gem 'guard-rubocop', '~> 1.5'
+  gem 'octokit', '~> 5.0'
   gem 'rspec', '~> 3.12'
   gem 'rspec_junit_formatter', '~> 0.6'
   gem 'rubocop', '~> 1.77'
