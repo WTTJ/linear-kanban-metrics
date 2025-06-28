@@ -7,23 +7,53 @@ require 'json'
 require 'octokit'
 require 'logger'
 
-# Main class for handling PR reviews with Claude 3.5 Sonnet (Latest Available)
-# Note: Claude 4 is not yet released. This script will be easily updatable when available.
+# Configuration value object for PR reviewer
+class ReviewerConfig
+  attr_reader :repo, :pr_number, :anthropic_api_key, :github_token
+
+  def initialize
+    @repo = ENV.fetch('GITHUB_REPOSITORY', nil)
+    @pr_number = ENV.fetch('PR_NUMBER', '0').to_i
+    @anthropic_api_key = ENV.fetch('ANTHROPIC_API_KEY', nil)
+    @github_token = ENV.fetch('GITHUB_TOKEN', nil)
+  end
+
+  def valid?
+    errors.empty?
+  end
+
+  def errors
+    validation_errors = []
+    validation_errors << 'GITHUB_REPOSITORY environment variable is required' if repo.nil? || repo.empty?
+    validation_errors << 'PR_NUMBER must be a positive integer' if pr_number <= 0
+    validation_errors << 'ANTHROPIC_API_KEY environment variable is required' if anthropic_api_key.nil? || anthropic_api_key.empty?
+    validation_errors << 'GITHUB_TOKEN environment variable is required' if github_token.nil? || github_token.empty?
+    validation_errors
+  end
+end
+
+# Main class for handling PR reviews with Claude Opus 4
+# rubocop:disable Metrics/ClassLength
 class PullRequestReviewer
   API_VERSION = '2023-06-01'
   CLAUDE_MODEL = 'claude-opus-4-20250514'
   MAX_TOKENS = 4096 # Increased for better review quality
   TEMPERATURE = 0.1 # Lower temperature for more consistent code reviews
 
+  # Timeout configurations (in seconds)
+  HTTP_TIMEOUT = 30 # Connection timeout
+  READ_TIMEOUT = 120 # Read timeout for API response
+  GITHUB_TIMEOUT = 15 # GitHub API timeout
+
   def initialize
     @logger = setup_logger
-    @github = setup_github_client
-    @config = extract_environment_config
+    @config = ReviewerConfig.new
     validate_configuration!
+    @github = setup_github_client
   end
 
   def run
-    @logger.info "Starting PR review for repository: #{@config[:repo]}, PR: #{@config[:pr_number]}"
+    @logger.info "Starting PR review for repository: #{@config.repo}, PR: #{@config.pr_number}"
 
     review_data = gather_review_data
     claude_response = request_claude_review(review_data)
@@ -48,30 +78,16 @@ class PullRequestReviewer
   end
 
   def setup_github_client
-    token = ENV.fetch('GITHUB_TOKEN', nil)
-    raise 'GITHUB_TOKEN environment variable is required' if token.nil? || token.empty?
-
-    Octokit::Client.new(access_token: token)
-  end
-
-  def extract_environment_config
-    {
-      repo: ENV.fetch('GITHUB_REPOSITORY', nil),
-      pr_number: ENV.fetch('PR_NUMBER', '0').to_i,
-      anthropic_api_key: ENV.fetch('ANTHROPIC_API_KEY', nil)
-    }
+    client = Octokit::Client.new(access_token: @config.github_token)
+    client.connection_options[:request] = { timeout: GITHUB_TIMEOUT, open_timeout: HTTP_TIMEOUT }
+    client
   end
 
   def validate_configuration!
-    errors = []
-    errors << 'GITHUB_REPOSITORY environment variable is required' if @config[:repo].nil? || @config[:repo].empty?
-    errors << 'PR_NUMBER must be a positive integer' if @config[:pr_number] <= 0
-    errors << 'ANTHROPIC_API_KEY environment variable is required' if @config[:anthropic_api_key].nil? || @config[:anthropic_api_key].empty?
+    return if @config.valid?
 
-    return if errors.empty?
-
-    @logger.error "Configuration validation failed: #{errors.join(', ')}"
-    raise ArgumentError, "Invalid configuration: #{errors.join(', ')}"
+    @logger.error "Configuration validation failed: #{@config.errors.join(', ')}"
+    raise ArgumentError, "Invalid configuration: #{@config.errors.join(', ')}"
   end
 
   def gather_review_data
@@ -88,21 +104,38 @@ class PullRequestReviewer
   end
 
   def safe_read_file(file_path, fallback = 'Not available.')
+    validate_file_path!(file_path)
     return File.read(file_path) if File.exist?(file_path)
 
     @logger.warn "File not found: #{file_path}, using fallback"
     fallback
+  rescue ArgumentError
+    # Re-raise validation errors (security issues)
+    raise
   rescue StandardError => e
     @logger.warn "Error reading file #{file_path}: #{e.message}, using fallback"
     fallback
   end
 
+  def validate_file_path!(file_path)
+    # Prevent directory traversal attacks
+    raise ArgumentError, 'File path cannot be nil or empty' if file_path.nil? || file_path.empty?
+    raise ArgumentError, 'File path cannot contain null bytes' if file_path.include?("\0")
+    raise ArgumentError, 'File path cannot contain directory traversal patterns' if file_path.include?('..')
+
+    # Ensure file path is within allowed directories
+    allowed_prefixes = ['doc/', 'reports/', '.github/scripts/']
+    return if allowed_prefixes.any? { |prefix| file_path.start_with?(prefix) }
+
+    raise ArgumentError, "File path must start with one of: #{allowed_prefixes.join(', ')}"
+  end
+
   def fetch_pr_diff
-    @logger.debug "Fetching PR diff for #{@config[:repo]}##{@config[:pr_number]}"
+    @logger.debug "Fetching PR diff for #{@config.repo}##{@config.pr_number}"
 
     @github.pull_request(
-      @config[:repo],
-      @config[:pr_number],
+      @config.repo,
+      @config.pr_number,
       accept: 'application/vnd.github.v3.diff'
     )
   rescue StandardError => e
@@ -123,7 +156,7 @@ class PullRequestReviewer
   end
 
   def request_claude_review(review_data)
-    @logger.info 'Requesting review from Claude 4 Sonnet...'
+    @logger.info 'Requesting review from Claude Opus 4...'
 
     prompt = build_claude_prompt(review_data)
     response = call_anthropic_api(prompt)
@@ -137,16 +170,22 @@ class PullRequestReviewer
 
     @logger.debug 'Sending request to Anthropic API...'
 
-    response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true) do |http|
+    response = Net::HTTP.start(uri.hostname, uri.port,
+                               use_ssl: true,
+                               open_timeout: HTTP_TIMEOUT,
+                               read_timeout: READ_TIMEOUT) do |http|
       http.request(request)
     end
 
     handle_api_response(response)
+  rescue Net::OpenTimeout, Net::ReadTimeout => e
+    @logger.error "Anthropic API request timed out: #{e.message}"
+    raise StandardError, "API request timed out after #{READ_TIMEOUT} seconds"
   end
 
   def build_api_request(uri, prompt)
     request = Net::HTTP::Post.new(uri)
-    request['x-api-key'] = @config[:anthropic_api_key]
+    request['x-api-key'] = @config.anthropic_api_key
     request['anthropic-version'] = API_VERSION
     request['content-type'] = 'application/json'
 
@@ -190,7 +229,7 @@ class PullRequestReviewer
 
     comment_body = format_github_comment(review_content)
 
-    @github.add_comment(@config[:repo], @config[:pr_number], comment_body)
+    @github.add_comment(@config.repo, @config.pr_number, comment_body)
     @logger.info 'Review comment posted successfully'
   rescue StandardError => e
     @logger.error "Failed to post GitHub comment: #{e.message}"
@@ -204,10 +243,11 @@ class PullRequestReviewer
       #{review_content}
 
       ---
-      *Review generated by Claude 4 Sonnet at #{timestamp}*
+      *Review generated by Claude Opus 4 at #{timestamp}*
     COMMENT
   end
 end
+# rubocop:enable Metrics/ClassLength
 
 # Script execution
 if __FILE__ == $PROGRAM_NAME

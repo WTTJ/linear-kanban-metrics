@@ -36,7 +36,11 @@ RSpec.describe PullRequestReviewer do
   end
 
   def setup_github_client_mock
+    connection_options = double('connection_options')
+    allow(connection_options).to receive(:[]=).with(:request, anything)
+
     allow(Octokit::Client).to receive(:new).and_return(github_client)
+    allow(github_client).to receive(:connection_options).and_return(connection_options)
   end
 
   describe '#initialize' do
@@ -55,7 +59,7 @@ RSpec.describe PullRequestReviewer do
 
       it 'raises descriptive error message' do
         # Act & Assert
-        expect { described_class.new }.to raise_error('GITHUB_TOKEN environment variable is required')
+        expect { described_class.new }.to raise_error(ArgumentError, /GITHUB_TOKEN environment variable is required/)
       end
     end
 
@@ -179,7 +183,7 @@ RSpec.describe PullRequestReviewer do
       end
     end
 
-    let(:file_path) { 'test_file.txt' }
+    let(:file_path) { 'doc/test_file.txt' }
     let(:custom_fallback) { nil }
 
     context 'when file exists and is readable' do
@@ -226,6 +230,53 @@ RSpec.describe PullRequestReviewer do
       it 'handles errors gracefully and returns fallback' do
         # Act & Assert
         expect(file_content).to eq('Not available.')
+      end
+    end
+
+    context 'with security validation' do
+      context 'when file path contains directory traversal' do
+        let(:file_path) { '../etc/passwd' }
+
+        it 'raises security error' do
+          # Act & Assert
+          expect { file_content }.to raise_error(ArgumentError, /directory traversal patterns/)
+        end
+      end
+
+      context 'when file path contains null bytes' do
+        let(:file_path) { "doc/test\0file.txt" }
+
+        it 'raises security error' do
+          # Act & Assert
+          expect { file_content }.to raise_error(ArgumentError, /null bytes/)
+        end
+      end
+
+      context 'when file path is outside allowed directories' do
+        let(:file_path) { 'unauthorized/file.txt' }
+
+        it 'raises security error' do
+          # Act & Assert
+          expect { file_content }.to raise_error(ArgumentError, /must start with one of/)
+        end
+      end
+
+      context 'when file path is nil' do
+        let(:file_path) { nil }
+
+        it 'raises security error' do
+          # Act & Assert
+          expect { file_content }.to raise_error(ArgumentError, /cannot be nil or empty/)
+        end
+      end
+
+      context 'when file path is empty' do
+        let(:file_path) { '' }
+
+        it 'raises security error' do
+          # Act & Assert
+          expect { file_content }.to raise_error(ArgumentError, /cannot be nil or empty/)
+        end
       end
     end
   end
@@ -294,6 +345,93 @@ RSpec.describe PullRequestReviewer do
       expect(described_class::CLAUDE_MODEL).to eq('claude-opus-4-20250514')
       expect(described_class::MAX_TOKENS).to eq(4096)
       expect(described_class::TEMPERATURE).to eq(0.1)
+    end
+
+    it 'defines timeout configurations', :aggregate_failures do
+      # Act & Assert
+      expect(described_class::HTTP_TIMEOUT).to eq(30)
+      expect(described_class::READ_TIMEOUT).to eq(120)
+      expect(described_class::GITHUB_TIMEOUT).to eq(15)
+    end
+  end
+end
+
+RSpec.describe ReviewerConfig do
+  subject(:config) { described_class.new }
+
+  before do
+    # Arrange - Setup environment variables
+    allow(ENV).to receive(:fetch).with('GITHUB_REPOSITORY', nil).and_return('test-repo')
+    allow(ENV).to receive(:fetch).with('PR_NUMBER', '0').and_return('123')
+    allow(ENV).to receive(:fetch).with('ANTHROPIC_API_KEY', nil).and_return('test-key')
+    allow(ENV).to receive(:fetch).with('GITHUB_TOKEN', nil).and_return('test-token')
+  end
+
+  describe '#initialize' do
+    it 'extracts configuration from environment variables', :aggregate_failures do
+      # Act & Assert
+      expect(config.repo).to eq('test-repo')
+      expect(config.pr_number).to eq(123)
+      expect(config.anthropic_api_key).to eq('test-key')
+      expect(config.github_token).to eq('test-token')
+    end
+  end
+
+  describe '#valid?' do
+    context 'with all required values' do
+      it 'returns true' do
+        # Act & Assert
+        expect(config.valid?).to be true
+      end
+    end
+
+    context 'with missing required values' do
+      before do
+        # Arrange - Remove required environment variable
+        allow(ENV).to receive(:fetch).with('GITHUB_REPOSITORY', nil).and_return(nil)
+      end
+
+      it 'returns false' do
+        # Act & Assert
+        expect(config.valid?).to be false
+      end
+    end
+  end
+
+  describe '#errors' do
+    context 'with valid configuration' do
+      it 'returns empty array' do
+        # Act & Assert
+        expect(config.errors).to be_empty
+      end
+    end
+
+    context 'with invalid PR number' do
+      before do
+        # Arrange - Set invalid PR number
+        allow(ENV).to receive(:fetch).with('PR_NUMBER', '0').and_return('0')
+      end
+
+      it 'includes PR number error' do
+        # Act & Assert
+        expect(config.errors).to include('PR_NUMBER must be a positive integer')
+      end
+    end
+
+    context 'with missing environment variables' do
+      before do
+        # Arrange - Remove all required variables
+        allow(ENV).to receive(:fetch).with('GITHUB_REPOSITORY', nil).and_return('')
+        allow(ENV).to receive(:fetch).with('ANTHROPIC_API_KEY', nil).and_return(nil)
+        allow(ENV).to receive(:fetch).with('GITHUB_TOKEN', nil).and_return('')
+      end
+
+      it 'includes all validation errors', :aggregate_failures do
+        # Act & Assert
+        expect(config.errors).to include('GITHUB_REPOSITORY environment variable is required')
+        expect(config.errors).to include('ANTHROPIC_API_KEY environment variable is required')
+        expect(config.errors).to include('GITHUB_TOKEN environment variable is required')
+      end
     end
   end
 end
