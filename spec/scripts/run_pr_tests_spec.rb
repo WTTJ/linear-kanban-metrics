@@ -140,7 +140,7 @@ RSpec.describe 'PR Test Runner Script' do
       it 'returns current branch name when available' do
         # Arrange
         allow(described_class).to receive(:execute_git_command)
-          .with('git branch --show-current 2>/dev/null')
+          .with(['git', 'branch', '--show-current'])
           .and_return('feature-branch')
 
         # Act & Assert
@@ -150,7 +150,7 @@ RSpec.describe 'PR Test Runner Script' do
       it 'returns HEAD when no branch name available' do
         # Arrange
         allow(described_class).to receive(:execute_git_command)
-          .with('git branch --show-current 2>/dev/null')
+          .with(['git', 'branch', '--show-current'])
           .and_return('')
 
         # Act & Assert
@@ -161,9 +161,9 @@ RSpec.describe 'PR Test Runner Script' do
     describe '.branch_exists?' do
       it 'returns true when branch exists in repository' do
         # Arrange
-        allow(described_class).to receive(:system)
-          .with(/git rev-parse --verify/)
-          .and_return(true)
+        allow(Open3).to receive(:capture3)
+          .with('git', 'rev-parse', '--verify', 'main', stdin_data: '', err: File::NULL)
+          .and_return(['', '', double(success?: true)])
 
         # Act & Assert
         expect(described_class.branch_exists?('main')).to be true
@@ -171,9 +171,9 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'returns false when branch does not exist' do
         # Arrange
-        allow(described_class).to receive(:system)
-          .with(/git rev-parse --verify/)
-          .and_return(false)
+        allow(Open3).to receive(:capture3)
+          .with('git', 'rev-parse', '--verify', 'nonexistent', stdin_data: '', err: File::NULL)
+          .and_return(['', '', double(success?: false)])
 
         # Act & Assert
         expect(described_class.branch_exists?('nonexistent')).to be false
@@ -194,16 +194,17 @@ RSpec.describe 'PR Test Runner Script' do
         expect(described_class.branch_exists?('   ')).to be false
       end
 
-      it 'escapes branch names properly for security' do
+      it 'uses Open3 for safe command execution' do
         # Arrange
-        allow(described_class).to receive(:system).and_return(true)
-        allow(Shellwords).to receive(:escape).and_call_original
+        allow(Open3).to receive(:capture3)
+          .and_return(['', '', double(success?: true)])
 
         # Act
         described_class.branch_exists?('feature/test-branch')
 
         # Assert
-        expect(Shellwords).to have_received(:escape).with('feature/test-branch')
+        expect(Open3).to have_received(:capture3)
+          .with('git', 'rev-parse', '--verify', 'feature/test-branch', stdin_data: '', err: File::NULL)
       end
     end
 
@@ -248,9 +249,9 @@ RSpec.describe 'PR Test Runner Script' do
     describe '.repository_exists?' do
       it 'returns true when in git repository' do
         # Arrange
-        allow(described_class).to receive(:system)
-          .with('git rev-parse --git-dir >/dev/null 2>&1')
-          .and_return(true)
+        allow(Open3).to receive(:capture3)
+          .with('git', 'rev-parse', '--git-dir', stdin_data: '', err: File::NULL)
+          .and_return(['', '', double(success?: true)])
 
         # Act & Assert
         expect(described_class.repository_exists?).to be true
@@ -258,9 +259,9 @@ RSpec.describe 'PR Test Runner Script' do
 
       it 'returns false when not in git repository' do
         # Arrange
-        allow(described_class).to receive(:system)
-          .with('git rev-parse --git-dir >/dev/null 2>&1')
-          .and_return(false)
+        allow(Open3).to receive(:capture3)
+          .with('git', 'rev-parse', '--git-dir', stdin_data: '', err: File::NULL)
+          .and_return(['', '', double(success?: false)])
 
         # Act & Assert
         expect(described_class.repository_exists?).to be false

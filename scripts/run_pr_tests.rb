@@ -16,6 +16,7 @@
 require 'optparse'
 require 'shellwords'
 require 'English'
+require 'open3'
 
 module Scripts
   # Custom exceptions for better error handling with context
@@ -79,14 +80,16 @@ module Scripts
   module GitOperations
     class << self
       def current_branch
-        branch = execute_git_command('git branch --show-current 2>/dev/null')
+        branch = execute_git_command(['git', 'branch', '--show-current'])
         branch.empty? ? 'HEAD' : branch
       end
 
       def branch_exists?(branch_name)
         return false if branch_name.nil? || branch_name.strip.empty?
 
-        system("git rev-parse --verify #{Shellwords.escape(branch_name)} >/dev/null 2>&1")
+        command = ['git', 'rev-parse', '--verify', branch_name]
+        _, _, status = Open3.capture3(*command, stdin_data: '', err: File::NULL)
+        status.success?
       end
 
       def diff_files(diff_args)
@@ -99,20 +102,33 @@ module Scripts
       end
 
       def repository_exists?
-        system('git rev-parse --git-dir >/dev/null 2>&1')
+        command = ['git', 'rev-parse', '--git-dir']
+        _, _, status = Open3.capture3(*command, stdin_data: '', err: File::NULL)
+        status.success?
       end
 
       private
 
-      def execute_git_command(command)
-        output = `#{command}`.strip
-        return output if $CHILD_STATUS.exitstatus.zero?
+      def execute_git_command(command_array)
+        stdout, stderr, status = Open3.capture3(*command_array, stdin_data: '')
+        return stdout.strip if status.success?
 
+        warn_about_git_error(command_array, stderr) if status.exitstatus != 0
         ''
       end
 
+      def warn_about_git_error(command, stderr)
+        return if stderr.strip.empty?
+
+        warn "Git command failed: #{command.join(' ')}"
+        warn "Error: #{stderr.strip}"
+      end
+
       def build_diff_command(diff_args)
-        "git diff --name-only #{diff_args} 2>/dev/null".strip
+        base_command = %w[git diff --name-only]
+        return base_command if diff_args.empty?
+
+        base_command + diff_args.split
       end
 
       def parse_diff_output(output)
@@ -381,12 +397,13 @@ module Scripts
   # Service for validating test environment
   class TestEnvironmentValidator
     def self.validate!
-      return if system('which bundle >/dev/null 2>&1')
+      command = %w[which bundle]
+      _, _, status = Open3.capture3(*command, stdin_data: '', err: File::NULL)
+      return if status.success?
 
-      raise CommandNotFoundError.new(
-        'bundle command not found. Please install bundler.',
-        context: { command: 'bundle', suggestion: 'gem install bundler' }
-      )
+      error_message = 'bundle command not found. Please install bundler.'
+      error_context = { command: 'bundle', suggestion: 'gem install bundler' }
+      raise CommandNotFoundError.new(error_message, context: error_context)
     end
   end
 
@@ -405,7 +422,7 @@ module Scripts
       command = build_rspec_command(spec_files)
       debug_print("Running: #{command.join(' ')}")
 
-      success = system(*command)
+      success = execute_rspec_command(command)
       raise TestFailureError, 'Some tests failed' unless success
 
       true
@@ -415,6 +432,28 @@ module Scripts
 
     def build_rspec_command(spec_files)
       %w[bundle exec rspec] + spec_files + %w[--format documentation]
+    end
+
+    def execute_rspec_command(command)
+      # Use Open3.popen3 to stream output in real-time while maintaining safety
+      Open3.popen3(*command) do |_stdin, stdout, stderr, wait_thread|
+        # Stream stdout in real-time
+        stdout_thread = Thread.new { stdout.each_line { |line| print line } }
+        stderr_thread = Thread.new { stderr.each_line { |line| warn line } }
+
+        stdout_thread.join
+        stderr_thread.join
+
+        wait_thread.value.success?
+      end
+    rescue Errno::ENOENT => e
+      handle_command_not_found_error(e)
+    end
+
+    def handle_command_not_found_error(error)
+      error_message = "Command not found: #{error.message}"
+      error_context = { command: 'bundle exec rspec', error: error.class.name }
+      raise CommandNotFoundError.new(error_message, context: error_context)
     end
 
     def debug_print(message)
@@ -546,10 +585,11 @@ module Scripts
   # Service for retrieving Git status information
   class GitStatusService
     def self.get_status_lines
-      status_output = `git status --porcelain 2>/dev/null`
-      return ['(git status failed)'] unless $CHILD_STATUS.exitstatus.zero?
+      command = %w[git status --porcelain]
+      stdout, _, status = Open3.capture3(*command, stdin_data: '')
+      return ['(git status failed)'] unless status.success?
 
-      status_lines = status_output.strip.split("\n")
+      status_lines = stdout.strip.split("\n")
       status_lines.empty? ? ['(no changes)'] : status_lines
     end
   end
@@ -581,10 +621,18 @@ module Scripts
     def show_suggestions
       puts
       OutputFormatter.info('💡 Try one of these:')
-      puts "   - Make sure you're on a feature branch: git checkout -b feature/my-changes"
-      puts "   - Commit your changes first: git add . && git commit -m 'your changes'"
-      puts "   - Run with different base: #{File.basename($PROGRAM_NAME)} origin/main"
-      puts "   - Check if base branch exists: git branch -a | grep #{@config.base_branch}"
+      feature_branch_message = '   - Make sure you\'re on a feature branch: ' \
+                               'git checkout -b feature/my-changes'
+      puts feature_branch_message
+      commit_message = '   - Commit your changes first: ' \
+                       'git add . && git commit -m \'your changes\''
+      puts commit_message
+      different_base_message = '   - Run with different base: ' \
+                               "#{File.basename($PROGRAM_NAME)} origin/main"
+      puts different_base_message
+      branch_check_message = '   - Check if base branch exists: ' \
+                             "git branch -a | grep #{@config.base_branch}"
+      puts branch_check_message
     end
   end
 
