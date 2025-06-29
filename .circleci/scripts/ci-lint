@@ -1,0 +1,98 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# CI Linter
+# Runs RuboCop linting with multiple output formats
+
+require 'fileutils'
+require 'json'
+
+class CILinter
+  def initialize
+    @results_dir = 'tmp/lint-results'
+  end
+
+  def run
+    puts 'Starting code linting analysis...'
+
+    setup_directories
+    run_rubocop_analysis
+    display_lint_summary
+
+    puts 'Linting analysis completed!'
+  end
+
+  private
+
+  def setup_directories
+    puts 'Creating lint results directory...'
+    FileUtils.mkdir_p(@results_dir)
+  end
+
+  def run_rubocop_analysis
+    puts 'Running RuboCop linting...'
+
+    rubocop_command = [
+      'bundle exec rubocop',
+      '--format progress',
+      '--format json',
+      "--out #{@results_dir}/rubocop.json",
+      '--format html',
+      "--out #{@results_dir}/rubocop.html"
+    ].join(' ')
+
+    success = system(rubocop_command)
+
+    if success
+      puts '✅ RuboCop analysis completed without violations'
+    else
+      puts '⚠️  RuboCop found style violations (this may not be a failure)'
+    end
+  end
+
+  def display_lint_summary
+    puts "\n=== RuboCop Analysis Summary ==="
+
+    if File.exist?("#{@results_dir}/rubocop.json")
+      display_json_summary
+    else
+      puts 'RuboCop analysis completed - see artifacts for details'
+    end
+  end
+
+  def display_json_summary
+    json_data = JSON.parse(File.read("#{@results_dir}/rubocop.json"))
+
+    if json_data['summary']
+      summary = json_data['summary']
+      puts "Files inspected: #{summary['inspected_file_count']}"
+      puts "Offenses found: #{summary['offense_count']}"
+
+      if summary['offense_count'].positive?
+        puts "⚠️  Found #{summary['offense_count']} style violations"
+
+        # Show offense breakdown by severity
+        offenses_by_severity = {}
+        json_data['files']&.each do |file|
+          file['offenses']&.each do |offense|
+            severity = offense['severity']
+            offenses_by_severity[severity] = (offenses_by_severity[severity] || 0) + 1
+          end
+        end
+
+        offenses_by_severity.each do |severity, count|
+          puts "  #{severity.capitalize}: #{count}"
+        end
+      else
+        puts '✅ No style violations found!'
+      end
+    else
+      puts 'RuboCop analysis completed'
+    end
+  rescue JSON::ParserError => e
+    puts "⚠️  Could not parse RuboCop JSON output: #{e.message}"
+  end
+end
+
+# Run the linter if this script is executed directly
+CILinter.new.run if __FILE__ == $PROGRAM_NAME

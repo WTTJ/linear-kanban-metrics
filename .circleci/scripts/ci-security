@@ -1,0 +1,86 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# CI Security Scanner
+# Runs Brakeman security analysis with multiple output formats
+
+require 'fileutils'
+require 'json'
+
+class CISecurityScanner
+  def initialize
+    @results_dir = 'tmp/security-results'
+  end
+
+  def run
+    puts 'Starting security analysis...'
+
+    setup_directories
+    success = run_brakeman_analysis
+    display_security_summary
+
+    puts 'Security analysis completed!'
+    success
+  end
+
+  private
+
+  def setup_directories
+    puts 'Creating security results directory...'
+    FileUtils.mkdir_p(@results_dir)
+  end
+
+  def run_brakeman_analysis
+    puts 'Running Brakeman security analysis...'
+
+    # Run Brakeman for each output format separately to avoid conflicts
+    formats = {
+      'json' => 'brakeman.json',
+      'plain' => 'brakeman.txt', 
+      'html' => 'brakeman.html'
+    }
+
+    success = true
+    formats.each do |format, filename|
+      command = "bundle exec brakeman --force --format #{format} --output #{@results_dir}/#{filename} --quiet"
+      result = system(command)
+      success = false unless result
+    end
+
+    puts 'Brakeman analysis completed'
+    success
+  end
+
+  def display_security_summary
+    puts "\n=== Brakeman Security Analysis Summary ==="
+
+    if File.exist?("#{@results_dir}/brakeman.txt")
+      puts File.read("#{@results_dir}/brakeman.txt")
+    elsif File.exist?("#{@results_dir}/brakeman.json")
+      display_json_summary
+    else
+      puts '✅ No security issues found!'
+    end
+  end
+
+  def display_json_summary
+    json_data = JSON.parse(File.read("#{@results_dir}/brakeman.json"))
+
+    if json_data['warnings']&.any?
+      puts "⚠️  Found #{json_data['warnings'].size} security warnings"
+      json_data['warnings'].first(3).each_with_index do |warning, index|
+        puts "  #{index + 1}. #{warning['warning_type']}: #{warning['message']}"
+      end
+      puts '  ... see full report for details' if json_data['warnings'].size > 3
+    else
+      puts '✅ No security warnings found!'
+    end
+
+    puts "❌ Found #{json_data['errors'].size} errors during analysis" if json_data['errors']&.any?
+  rescue JSON::ParserError => e
+    puts "⚠️  Could not parse Brakeman JSON output: #{e.message}"
+  end
+end
+
+# Run the security scanner if this script is executed directly
+CISecurityScanner.new.run if __FILE__ == $PROGRAM_NAME

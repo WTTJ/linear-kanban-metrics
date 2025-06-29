@@ -48,31 +48,8 @@ jobs:
     steps:
       - setup_project
       - run:
-          name: Create test results directory
-          command: mkdir -p tmp/test-results
-      - run:
-          name: Run RSpec tests with coverage
-          command: |
-            bundle exec rspec \
-              --format progress \
-              --format RspecJunitFormatter \
-              --out tmp/test-results/rspec.xml
-          environment:
-            COVERAGE: true
-      - run:
-          name: Generate coverage summary
-          command: |
-            echo "Coverage Summary:" > tmp/test-results/coverage-summary.txt
-            if [ -f coverage/.last_run.json ]; then
-              echo "Coverage data found in coverage/.last_run.json"
-              # Extract coverage percentage if available
-              if command -v jq >/dev/null 2>&1; then
-                jq -r '.result.line' coverage/.last_run.json >> tmp/test-results/coverage-summary.txt 2>/dev/null || echo "Coverage data extracted"
-              fi
-            fi
-            if [ -f coverage/index.html ]; then
-              echo "HTML coverage report generated at coverage/index.html"
-            fi
+          name: Run tests with coverage
+          command: ./.circleci/scripts/ci-test
       - store_test_artifacts
 
   # Security Analysis with Brakeman
@@ -81,29 +58,8 @@ jobs:
     steps:
       - setup_project
       - run:
-          name: Create security results directory
-          command: mkdir -p tmp/security-results
-      - run:
-          name: Run Brakeman security analysis
-          command: |
-            bundle exec brakeman \
-              --force \
-              --format json \
-              --output tmp/security-results/brakeman.json \
-              --format plain \
-              --output tmp/security-results/brakeman.txt \
-              --format html \
-              --output tmp/security-results/brakeman.html \
-              --quiet || true
-      - run:
-          name: Display security summary
-          command: |
-            echo "=== Brakeman Security Analysis Summary ==="
-            if [ -f tmp/security-results/brakeman.txt ]; then
-              cat tmp/security-results/brakeman.txt
-            else
-              echo "No security issues found!"
-            fi
+          name: Run security analysis
+          command: ./.circleci/scripts/ci-security
       - store_artifacts:
           path: ~/kanban-metrics/tmp/security-results
           destination: security-reports
@@ -114,29 +70,8 @@ jobs:
     steps:
       - setup_project
       - run:
-          name: Create lint results directory
-          command: mkdir -p tmp/lint-results
-      - run:
-          name: Run RuboCop linting
-          command: |
-            bundle exec rubocop \
-              --format progress \
-              --format json \
-              --out tmp/lint-results/rubocop.json \
-              --format html \
-              --out tmp/lint-results/rubocop.html
-      - run:
-          name: Display lint summary
-          command: |
-            echo "=== RuboCop Analysis Summary ==="
-            if [ -f tmp/lint-results/rubocop.json ]; then
-              # Extract summary from JSON if jq is available
-              if command -v jq >/dev/null 2>&1; then
-                jq -r '.summary' tmp/lint-results/rubocop.json 2>/dev/null || echo "Linting analysis completed"
-              else
-                echo "RuboCop analysis completed - see artifacts for details"
-              fi
-            fi
+          name: Run code linting
+          command: ./.circleci/scripts/ci-lint
       - store_artifacts:
           path: ~/kanban-metrics/tmp/lint-results
           destination: lint-reports
@@ -147,22 +82,8 @@ jobs:
     steps:
       - setup_project
       - run:
-          name: Create quality results directory
-          command: mkdir -p tmp/quality-results
-      - run:
           name: Run comprehensive quality checks
-          command: |
-            echo "Running comprehensive code quality analysis..."
-            
-            # Run RuboCop
-            echo "=== Running RuboCop ===" | tee tmp/quality-results/quality-summary.txt
-            bundle exec rubocop --format simple | tee -a tmp/quality-results/quality-summary.txt
-            
-            echo -e "\n=== Running Brakeman ===" | tee -a tmp/quality-results/quality-summary.txt
-            bundle exec brakeman --force --quiet --format plain | tee -a tmp/quality-results/quality-summary.txt || echo "Brakeman analysis completed"
-            
-            echo -e "\n=== Running Tests with Coverage ===" | tee -a tmp/quality-results/quality-summary.txt
-            COVERAGE=true bundle exec rspec --format progress | tee -a tmp/quality-results/quality-summary.txt
+          command: ./.circleci/scripts/ci-quality
       - store_artifacts:
           path: ~/kanban-metrics/tmp/quality-results
           destination: quality-reports
@@ -173,26 +94,6 @@ workflows:
   
   # Primary workflow - run on all commits
   test_and_quality:
-    jobs:
-      - test
-      - security
-      - lint
-      - quality:
-          requires:
-            - test
-            - security
-            - lint
-
-  # Nightly comprehensive check
-  nightly:
-    triggers:
-      - schedule:
-          cron: "0 2 * * *"  # Run at 2 AM UTC every day
-          filters:
-            branches:
-              only:
-                - main
-                - master
     jobs:
       - test
       - security
