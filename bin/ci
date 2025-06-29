@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Convenience wrapper for the CI runner in .circleci/scripts/
+# This allows developers to run CI checks with: bin/ci [options]
+
+# Execute the main CI runner script
+exec('./.circleci/scripts/ci-runner', *ARGV)

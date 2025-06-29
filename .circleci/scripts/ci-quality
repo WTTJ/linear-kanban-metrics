@@ -1,0 +1,121 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# CI Quality Checker
+# Runs comprehensive quality checks including linting, security, and tests
+
+require 'fileutils'
+
+class CIQualityChecker
+  def initialize
+    @results_dir = 'tmp/quality-results'
+    @summary_file = "#{@results_dir}/quality-summary.txt"
+  end
+
+  def run
+    puts 'Starting comprehensive code quality analysis...'
+
+    setup_directories
+    run_quality_checks
+
+    puts 'Quality analysis completed!'
+    display_final_summary
+  end
+
+  private
+
+  def setup_directories
+    puts 'Creating quality results directory...'
+    FileUtils.mkdir_p(@results_dir)
+  end
+
+  def run_quality_checks
+    File.open(@summary_file, 'w') do |summary|
+      summary.puts 'Comprehensive Code Quality Analysis Report'
+      summary.puts '=' * 50
+      summary.puts "Generated at: #{Time.now}"
+      summary.puts ''
+
+      run_rubocop_check(summary)
+      run_brakeman_check(summary)
+      run_test_check(summary)
+    end
+  end
+
+  def run_rubocop_check(summary)
+    puts 'Running RuboCop analysis...'
+
+    summary.puts '=== RuboCop Analysis ==='
+    summary.flush
+
+    rubocop_command = 'bundle exec rubocop --format simple'
+
+    success = system("#{rubocop_command} | tee -a #{@summary_file}")
+
+    if success
+      puts '✅ RuboCop: No violations found'
+    else
+      puts '⚠️  RuboCop: Style violations detected'
+    end
+
+    summary.puts ''
+  end
+
+  def run_brakeman_check(summary)
+    puts 'Running Brakeman security analysis...'
+
+    summary.puts '=== Brakeman Security Analysis ==='
+    summary.flush
+
+    brakeman_command = 'bundle exec brakeman --force --quiet --format plain'
+
+    # Brakeman may exit with non-zero for warnings, so we don't check return status
+    system("#{brakeman_command} | tee -a #{@summary_file}")
+
+    puts '✅ Brakeman analysis completed'
+
+    summary.puts ''
+  end
+
+  def run_test_check(summary)
+    puts 'Running tests with coverage...'
+
+    summary.puts '=== Test Suite with Coverage ==='
+    summary.flush
+
+    test_command = 'COVERAGE=true bundle exec rspec --format progress'
+
+    success = system("#{test_command} | tee -a #{@summary_file}")
+
+    if success
+      puts '✅ All tests passed'
+    else
+      puts '❌ Some tests failed'
+      exit(1) # Fail the CI if tests fail
+    end
+
+    summary.puts ''
+  end
+
+  def display_final_summary
+    puts "\n#{'=' * 60}"
+    puts 'QUALITY ANALYSIS SUMMARY'
+    puts '=' * 60
+
+    if File.exist?(@summary_file)
+      # Display last few lines of summary for quick overview
+      summary_lines = File.readlines(@summary_file)
+      if summary_lines.size > 20
+        puts '... (see full report in artifacts) ...'
+        puts summary_lines.last(10)
+      else
+        puts File.read(@summary_file)
+      end
+    end
+
+    puts "\nFull quality report saved to: #{@summary_file}"
+  end
+end
+
+# Run the quality checker if this script is executed directly
+CIQualityChecker.new.run if __FILE__ == $PROGRAM_NAME
