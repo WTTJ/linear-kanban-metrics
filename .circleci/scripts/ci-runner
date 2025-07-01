@@ -5,8 +5,11 @@
 # This allows developers to run the same checks locally that run in CI
 
 require 'optparse'
+require_relative 'ci_logger'
 
 class CIRunner
+  attr_reader :logger, :checks_to_run, :verbose
+
   AVAILABLE_CHECKS = {
     'test' => 'Run tests with coverage',
     'security' => 'Run security analysis with Brakeman',
@@ -16,24 +19,25 @@ class CIRunner
     'comprehensive' => 'Run comprehensive quality analysis (same as quality)'
   }.freeze
 
-  def initialize
+  def initialize(logger: CILogger)
+    @logger = logger
     @checks_to_run = []
     @verbose = false
     parse_options
   end
 
   def run
-    if @checks_to_run.empty?
-      puts 'No checks specified. Use --help to see available options.'
+    if checks_to_run.empty?
+      logger.warning('No checks specified. Use --help to see available options.')
       return
     end
 
-    puts "Starting CI checks: #{@checks_to_run.join(', ')}"
-    puts '=' * 60
+    logger.info("Starting CI checks: #{checks_to_run.join(', ')}")
+    logger.section('CI Pipeline Execution')
 
     success = true
 
-    @checks_to_run.each do |check|
+    checks_to_run.each do |check|
       success = case check
                 when 'all'
                   run_all_individual_checks && success
@@ -45,10 +49,10 @@ class CIRunner
     end
 
     if success
-      puts "\n✅ All CI checks completed successfully!"
-      puts 'Results are available in the tmp/ directory.'
+      logger.success('All CI checks completed successfully!')
+      logger.info('Results are available in the tmp/ directory.')
     else
-      puts "\n❌ Some CI checks failed!"
+      logger.error('Some CI checks failed!')
       exit(1)
     end
   end
@@ -90,12 +94,12 @@ class CIRunner
       # Validate check names
       invalid_checks = @checks_to_run - AVAILABLE_CHECKS.keys
       unless invalid_checks.empty?
-        puts "Invalid checks: #{invalid_checks.join(', ')}"
-        puts "Available checks: #{AVAILABLE_CHECKS.keys.join(', ')}"
+        logger.error("Invalid checks: #{invalid_checks.join(', ')}")
+        logger.info("Available checks: #{AVAILABLE_CHECKS.keys.join(', ')}")
         exit(1)
       end
     rescue OptionParser::InvalidOption => e
-      puts e.message
+      logger.error(e.message)
       puts parser
       exit(1)
     end
@@ -118,24 +122,25 @@ class CIRunner
     script_path = ".circleci/scripts/ci-#{check}"
 
     unless File.exist?(script_path) && File.executable?(script_path)
-      puts "❌ Script not found or not executable: #{script_path}"
+      logger.error("Script not found or not executable: #{script_path}")
       return false
     end
 
-    puts "\n#{'-' * 40}"
-    puts "Running: #{check.upcase}"
-    puts('-' * 40)
+    logger.step("Running: #{check.upcase}")
+    logger.debug("Executing script: #{script_path}")
 
     start_time = Time.now
-    success = system("./#{script_path}")
+    success = system(script_path)
     end_time = Time.now
 
     duration = (end_time - start_time).round(2)
 
+    logger.command(script_path, success: success)
+
     if success
-      puts "✅ #{check.upcase} completed successfully (#{duration}s)"
+      logger.success("#{check.upcase} completed successfully (#{duration}s)")
     else
-      puts "❌ #{check.upcase} failed (#{duration}s)"
+      logger.error("#{check.upcase} failed (#{duration}s)")
     end
 
     success

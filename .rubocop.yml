@@ -3,9 +3,12 @@
 
 require:
   - rubocop-rspec
+  - rubocop-rspec_rails
 
 plugins:
   - rubocop-performance
+  - rubocop-capybara
+  - rubocop-factory_bot
 
 AllCops:
   TargetRubyVersion: 3.0
@@ -17,6 +20,14 @@ AllCops:
     - 'spec/vcr_cassettes/**/*'
     - 'kanban_metrics.backup.rb'
     - 'kanban_metrics_original.rb'
+    - '**/*.yml'
+    - '**/*.yaml'
+    - '**/*.md'
+    - '**/*.json'
+    - '**/*.txt'
+  Include:
+    - '**/*.rb'
+    - '.circleci/scripts/ci-*'
 
 # Gem structure specific settings
 Gemspec/RequiredRubyVersion:
@@ -51,6 +62,7 @@ Metrics/MethodLength:
   Max: 25
   Exclude:
     - 'lib/kanban_metrics/linear/http_client.rb'  # Complex response handling
+    - '.circleci/scripts/**/*'  # CI scripts can have longer methods for setup/orchestration
 
 Metrics/ClassLength:
   Max: 160
@@ -63,6 +75,7 @@ Metrics/AbcSize:
     - 'lib/kanban_metrics/linear/http_client.rb'  # Complex response handling
     - 'lib/kanban_metrics/formatters/csv_formatter.rb'  # CSV formatting logic
     - 'lib/kanban_metrics/formatters/table_formatter.rb'  # Table formatting with many columns
+    - '.circleci/scripts/**/*'  # CI scripts can have higher complexity for orchestration
 
 Metrics/CyclomaticComplexity:
   Max: 15
@@ -83,6 +96,11 @@ Naming/AccessorMethodName:
 
 Naming/VariableNumber:
   Enabled: false
+
+# Lint cops
+Lint/ScriptPermission:
+  Exclude:
+    - '.circleci/scripts/ci_logger.rb'  # Library file, not executable script
 
 # RSpec specific
 RSpec/ExampleLength:
@@ -128,12 +146,4 @@ RSpec/NamedSubject:
   Enabled: false
 
 RSpec/PredicateMatcher:
-  Enabled: false
-
-# Capybara RSpec cops - disable problematic ones
-Capybara/RSpec/PredicateMatcher:
-  Enabled: false
-
-# FactoryBot cops - disable problematic ones
-FactoryBot/AssociationStyle:
   Enabled: false

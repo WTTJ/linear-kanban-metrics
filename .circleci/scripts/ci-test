@@ -5,56 +5,64 @@
 # Runs RSpec tests with coverage and generates test results
 
 require 'fileutils'
+require_relative 'ci_logger'
 
 class CITestRunner
-  def initialize
-    @results_dir = 'tmp/test-results'
-    @coverage_enabled = ENV['COVERAGE'] == 'true'
+  attr_reader :logger, :results_dir, :coverage_enabled
+
+  def initialize(logger: CILogger, results_dir: 'tmp/test-results', coverage_enabled: ENV['COVERAGE'] == 'true')
+    @logger = logger
+    @results_dir = results_dir
+    @coverage_enabled = coverage_enabled
   end
 
   def run
-    puts 'Starting CI test runner...'
+    logger.info('Starting CI test runner...')
 
     setup_directories
     run_tests
     generate_coverage_summary
 
-    puts 'Test run completed successfully!'
+    logger.success('Test run completed successfully!')
   end
 
   private
 
   def setup_directories
-    puts 'Creating test results directory...'
-    FileUtils.mkdir_p(@results_dir)
+    logger.step('Creating test results directory...')
+    FileUtils.mkdir_p(results_dir)
+    logger.file_operation('Created directory', results_dir)
   end
 
   def run_tests
-    puts 'Running RSpec tests with coverage...'
+    logger.step('Running RSpec tests with coverage...')
 
     rspec_command = [
       'bundle exec rspec',
       '--format progress',
       '--format RspecJunitFormatter',
-      "--out #{@results_dir}/rspec.xml"
+      "--out #{results_dir}/rspec.xml"
     ].join(' ')
 
-    env_vars = @coverage_enabled ? { 'COVERAGE' => 'true' } : {}
+    env_vars = coverage_enabled ? { 'COVERAGE' => 'true' } : {}
 
+    logger.debug("Executing command: #{rspec_command} with env vars: #{env_vars}")
     success = system(env_vars, rspec_command)
 
+    logger.command(rspec_command, success: success)
+
     unless success
-      puts '❌ Tests failed!'
+      logger.error('Tests failed!')
       exit(1)
     end
 
-    puts '✅ Tests passed!'
+    logger.success('Tests passed!')
   end
 
   def generate_coverage_summary
-    puts 'Generating coverage summary...'
+    logger.step('Generating coverage summary...')
 
-    summary_file = "#{@results_dir}/coverage-summary.txt"
+    summary_file = "#{results_dir}/coverage-summary.txt"
     File.open(summary_file, 'w') do |f|
       f.puts 'Coverage Summary:'
 
@@ -65,13 +73,14 @@ class CITestRunner
         if system('command -v jq >/dev/null 2>&1')
           coverage_result = `jq -r '.result.line' coverage/.last_run.json 2>/dev/null`.strip
           f.puts "Line Coverage: #{coverage_result}%" unless coverage_result.empty?
+          logger.stat('Line Coverage', "#{coverage_result}%", good: coverage_result.to_f >= 80.0) unless coverage_result.empty?
         end
       end
 
       f.puts 'HTML coverage report generated at coverage/index.html' if File.exist?('coverage/index.html')
     end
 
-    puts "Coverage summary saved to #{summary_file}"
+    logger.file_operation('Coverage summary saved to', summary_file)
   end
 end
 
