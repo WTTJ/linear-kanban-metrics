@@ -48,9 +48,9 @@ All scripts create organized output in the `tmp/` directory:
 ## Usage Recommendations
 
 - **For development**: Use `bin/ci test` or `bin/ci lint` for quick individual checks
-- **For comprehensive analysis**: Use `bin/ci quality` for a complete quality report
-- **For CI/CD**: Use individual scripts or comprehensive quality based on your workflow needs
+- **For comprehensive analysis**: Use `bin/ci quality` for a complete quality report (local development only)
+- **For CI/CD**: Individual scripts run in parallel for efficient CI pipeline
 
 ## CircleCI Integration
 
-The `.circleci/config.yml` file calls these scripts directly, ensuring consistency between local development and CI environments.
+The `.circleci/config.yml` file runs individual scripts in parallel (test, security, lint) for efficient CI execution. The quality script is available for local comprehensive analysis but not used in CI to avoid duplication.

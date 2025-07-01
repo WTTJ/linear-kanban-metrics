@@ -76,18 +76,6 @@ jobs:
           path: ~/kanban-metrics/tmp/lint-results
           destination: lint-reports
 
-  # Combined quality check job
-  quality:
-    executor: ruby-executor
-    steps:
-      - setup_project
-      - run:
-          name: Run comprehensive quality checks
-          command: ./.circleci/scripts/ci-quality
-      - store_artifacts:
-          path: ~/kanban-metrics/tmp/quality-results
-          destination: quality-reports
-
 # Define workflows
 workflows:
   version: 2
@@ -98,8 +86,3 @@ workflows:
       - test
       - security
       - lint
-      - quality:
-          requires:
-            - test
-            - security
-            - lint
