@@ -25,9 +25,22 @@ end
 
 def test_long_prompt
   puts '🧪 Testing Dust API with long PR review prompt (GitHub Actions simulation)...'
-  
-  # This is similar to what the actual PR review script sends
-  long_prompt = <<~PROMPT
+
+  long_prompt = create_test_prompt
+  puts "📊 Prompt length: #{long_prompt.length} characters"
+
+  conversation_id = create_conversation(long_prompt)
+  return false unless conversation_id
+
+  puts "✅ Conversation created: #{conversation_id}"
+  await_agent_response(conversation_id)
+rescue StandardError => e
+  puts "❌ Error: #{e.message}"
+  false
+end
+
+def create_test_prompt
+  <<~PROMPT
     # PR Review Prompt Template
 
     You are a senior Ruby developer reviewing a pull request for a kanban metrics analysis tool.
@@ -70,97 +83,121 @@ def test_long_prompt
 
     Please provide your review in markdown format.
   PROMPT
+end
 
-  api_key = ENV['DUST_API_KEY']
-  workspace_id = ENV['DUST_WORKSPACE_ID']
-  agent_id = ENV['DUST_AGENT_ID']
-  
-  # Create conversation (same as PR script)
-  uri = URI("https://dust.tt/api/v1/w/#{workspace_id}/assistant/conversations")
+def create_conversation(prompt)
+  uri = URI("https://dust.tt/api/v1/w/#{ENV.fetch('DUST_WORKSPACE_ID', nil)}/assistant/conversations")
+  request_data = build_conversation_request(prompt)
+
+  puts '🔄 Creating conversation...'
+  response = make_http_request(uri, :post, request_data[:headers], request_data[:body])
+
+  handle_conversation_response(response)
+end
+
+def build_conversation_request(prompt)
   headers = {
-    'Authorization' => "Bearer #{api_key}",
+    'Authorization' => "Bearer #{ENV.fetch('DUST_API_KEY', nil)}",
     'Content-Type' => 'application/json'
   }
-  
+
   body = {
     message: {
-      content: long_prompt,
+      content: prompt,
       context: {
         timezone: 'UTC',
         username: 'github-pr-reviewer',
         fullName: 'GitHub PR Reviewer'
       },
-      mentions: [{ configurationId: agent_id }]
+      mentions: [{ configurationId: ENV.fetch('DUST_AGENT_ID', nil) }]
     },
     blocking: true,
     streamGenerationEvents: false
   }.to_json
 
-  puts "📊 Prompt length: #{long_prompt.length} characters"
-  puts "🔄 Creating conversation..."
-  
+  { headers: headers, body: body }
+end
+
+def handle_conversation_response(response)
+  if response.code == '200'
+    data = JSON.parse(response.body)
+    data.dig('conversation', 'sId')
+  else
+    puts "❌ Failed to create conversation: #{response.code} #{response.body[0..200]}"
+    nil
+  end
+end
+
+# rubocop:disable Naming/PredicateMethod
+def await_agent_response(conversation_id)
+  (1..5).each do |attempt|
+    puts "🔍 Checking for response (attempt #{attempt}/5)..."
+    sleep(5)
+
+    response = get_conversation(conversation_id)
+    return true if process_conversation_response(response)
+  end
+
+  puts '❌ Agent did not respond after 5 attempts (25 seconds)'
+  false
+end
+
+def get_conversation(conversation_id)
+  uri = URI("https://dust.tt/api/v1/w/#{ENV.fetch('DUST_WORKSPACE_ID', nil)}/assistant/conversations/#{conversation_id}")
+  headers = { 'Authorization' => "Bearer #{ENV.fetch('DUST_API_KEY', nil)}" }
+
+  make_http_request(uri, :get, headers)
+end
+
+def process_conversation_response(response)
+  return false unless response.code == '200'
+
+  conv_data = JSON.parse(response.body)
+  messages = conv_data.dig('conversation', 'content')
+
+  return false unless messages && messages.length > 1
+
+  handle_agent_messages(messages)
+end
+
+def handle_agent_messages(messages)
+  # rubocop:enable Naming/PredicateMethod
+  agent_messages = messages.flatten.select { |msg| msg&.dig('type') == 'agent_message' }
+
+  if agent_messages.any?
+    puts "✅ Agent responded! (#{agent_messages.length} messages)"
+    content = agent_messages.last&.dig('content')
+    puts "📝 Response preview: #{content&.slice(0, 200)}..."
+    true
+  else
+    display_no_agent_response(messages)
+    false
+  end
+end
+
+def display_no_agent_response(messages)
+  puts "⏳ No agent response yet... (found #{messages.length} messages total)"
+  message_types = messages.flatten.filter_map { |m| m&.dig('type') }.uniq
+  puts "   Message types: #{message_types.join(', ')}"
+end
+
+def make_http_request(uri, method, headers, body = nil)
   http = Net::HTTP.new(uri.host, uri.port)
   http.use_ssl = true
   http.open_timeout = 30
   http.read_timeout = 120
-  
-  request = Net::HTTP::Post.new(uri)
+
+  request = case method
+            when :post
+              Net::HTTP::Post.new(uri)
+            when :get
+              Net::HTTP::Get.new(uri)
+            end
+
   headers.each { |key, value| request[key] = value }
-  request.body = body
-  
-  response = http.request(request)
-  
-  if response.code == '200'
-    data = JSON.parse(response.body)
-    conversation_id = data.dig('conversation', 'sId')
-    puts "✅ Conversation created: #{conversation_id}"
-    
-    # Wait and check for response multiple times
-    (1..5).each do |attempt|
-      puts "🔍 Checking for response (attempt #{attempt}/5)..."
-      sleep(5)
-      
-      # Get conversation
-      get_uri = URI("https://dust.tt/api/v1/w/#{workspace_id}/assistant/conversations/#{conversation_id}")
-      get_request = Net::HTTP::Get.new(get_uri)
-      get_request['Authorization'] = "Bearer #{api_key}"
-      
-      get_response = http.request(get_request)
-      
-      if get_response.code == '200'
-        conv_data = JSON.parse(get_response.body)
-        messages = conv_data.dig('conversation', 'content')
-        
-        if messages && messages.length > 1
-          agent_messages = messages.flatten.select { |msg| msg&.dig('type') == 'agent_message' }
-          
-          if agent_messages.any?
-            puts "✅ Agent responded! (#{agent_messages.length} messages)"
-            content = agent_messages.last&.dig('content')
-            puts "📝 Response preview: #{content&.slice(0, 200)}..."
-            return true
-          else
-            puts "⏳ No agent response yet... (found #{messages.length} messages total)"
-            message_types = messages.flatten.filter_map { |m| m&.dig('type') }.uniq
-            puts "   Message types: #{message_types.join(', ')}"
-          end
-        else
-          puts "⏳ Waiting for messages..."
-        end
-      else
-        puts "❌ Error getting conversation: #{get_response.code}"
-      end
-    end
-    
-    puts "❌ Agent did not respond after 5 attempts (25 seconds)"
-    false
-  else
-    puts "❌ Failed to create conversation: #{response.code} #{response.body[0..200]}"
-    false
-  end
-rescue StandardError => e
-  puts "❌ Error: #{e.message}"
-  false
+  request.body = body if body
+
+  http.request(request)
 end
 
 # Main execution
