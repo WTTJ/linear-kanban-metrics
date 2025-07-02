@@ -376,14 +376,22 @@ module DustCitationProcessor
   end
 
   def replace_citation_markers(content, citation_map)
-    # Replace :cite[id] markers with numbered references [1], [2], etc.
+    # Replace :cite[id] or :cite[id1,id2,...] markers with numbered references
     content.gsub(/:cite\[([^\]]+)\]/) do |match|
-      cite_id = Regexp.last_match(1)
-      if citation_map[cite_id]
-        "[#{citation_map[cite_id][:index]}]"
+      cite_ids_string = Regexp.last_match(1)
+      cite_ids = cite_ids_string.split(',').map(&:strip)
+      
+      # Process each citation ID and collect valid references
+      references = cite_ids.filter_map do |cite_id|
+        citation_map[cite_id][:index] if citation_map[cite_id]
+      end
+      
+      if references.any?
+        # Format as [1], [1,2], or [1,2,3] etc.
+        "[#{references.join(',')}]"
       else
-        # If citation ID not found, keep the original marker
-        match
+        # If no citation IDs found, keep the original marker but make it more visible
+        "**#{match}**"
       end
     end
   end
