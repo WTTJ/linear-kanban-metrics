@@ -340,8 +340,11 @@ class DustProvider < AIProvider
 
     @logger.debug "Created Dust conversation: #{conversation_id}"
 
-    # Give the agent some time to process before fetching response
-    sleep(2)
+    # Give the agent more time to process before fetching response
+    # GitHub Actions might need longer due to network latency
+    initial_wait = ENV['GITHUB_ACTIONS'] ? 8 : 3
+    @logger.debug "Waiting #{initial_wait} seconds for agent to process..."
+    sleep(initial_wait)
 
     get_response_with_retries(conversation_id)
   end
@@ -358,13 +361,16 @@ class DustProvider < AIProvider
       'Authorization' => "Bearer #{@config.dust_api_key}",
       'Content-Type' => 'application/json'
     }
+    
+    # Try alternative mention format - sometimes helps with agent triggering
     body = {
       message: {
         content: prompt,
         context: {
           timezone: 'UTC',
           username: 'github-pr-reviewer',
-          fullName: 'GitHub PR Reviewer'
+          fullName: 'GitHub PR Reviewer',
+          origin: 'api'
         },
         mentions: [{ configurationId: @config.dust_agent_id }]
       },
@@ -372,7 +378,8 @@ class DustProvider < AIProvider
       streamGenerationEvents: false
     }.to_json
 
-    @logger.debug "Creating Dust conversation with body: #{body}"
+    @logger.debug "Creating Dust conversation with prompt length: #{prompt.length} chars"
+    @logger.debug "Agent ID: #{@config.dust_agent_id}"
     @http_client.post(uri, headers, body)
   end
 
@@ -385,7 +392,7 @@ class DustProvider < AIProvider
     extract_content(response)
   end
 
-  def get_response_with_retries(conversation_id, max_retries = 3)
+  def get_response_with_retries(conversation_id, max_retries = 5)
     retries = 0
 
     while retries < max_retries
@@ -397,7 +404,7 @@ class DustProvider < AIProvider
         return response unless response.include?('Dust agent did not respond') || response.include?('empty response')
 
         if retries < max_retries - 1
-          wait_time = (retries + 1) * 3 # Progressive backoff: 3s, 6s, 9s
+          wait_time = (retries + 1) * 5 # Longer wait: 5s, 10s, 15s, 20s
           @logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
           sleep(wait_time)
         end
@@ -406,12 +413,36 @@ class DustProvider < AIProvider
       rescue StandardError => e
         @logger.warn "Error fetching response (attempt #{retries + 1}): #{e.message}"
         retries += 1
-        sleep(2) if retries < max_retries
+        sleep(3) if retries < max_retries
       end
     end
 
-    @logger.error "Agent did not respond after #{max_retries} attempts"
-    'Dust agent did not respond after multiple attempts. The agent may be busy or misconfigured.'
+    @logger.error "Agent did not respond after #{max_retries} attempts with longer timeouts"
+    
+    # Provide a more helpful fallback message for GitHub Actions
+    <<~FALLBACK
+      ## PR Review Status
+      
+      ⚠️ **Dust AI agent did not respond after multiple attempts**
+      
+      This may be due to:
+      - Agent being busy with other requests
+      - Network timeout in CI/CD environment
+      - Large prompt requiring more processing time
+      
+      **Suggested Actions:**
+      1. Re-run the workflow in a few minutes
+      2. Check agent status in Dust dashboard
+      3. Consider using the Anthropic provider as fallback
+      
+      **Debug Information:**
+      - Conversation ID: #{conversation_id}
+      - Workspace: #{@config.dust_workspace_id}
+      - Agent: #{@config.dust_agent_id}
+      - Timestamp: #{Time.now}
+      
+      The conversation was created successfully but the agent did not generate a response within the timeout period.
+    FALLBACK
   end
 
   def extract_content(api_response)
