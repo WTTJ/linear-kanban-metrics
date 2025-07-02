@@ -333,8 +333,17 @@ class DustProvider < AIProvider
     conversation = create_conversation(prompt)
     conversation_id = conversation.dig('conversation', 'sId')
 
+    if conversation_id.nil?
+      @logger.error "Failed to create Dust conversation. Response: #{conversation.inspect}"
+      return 'Failed to create Dust conversation. Please check your configuration and try again.'
+    end
+
     @logger.debug "Created Dust conversation: #{conversation_id}"
-    get_response(conversation_id)
+
+    # Give the agent some time to process before fetching response
+    sleep(2)
+
+    get_response_with_retries(conversation_id)
   end
 
   def provider_name
@@ -376,18 +385,62 @@ class DustProvider < AIProvider
     extract_content(response)
   end
 
-  def extract_content(api_response)
-    messages = api_response.dig('conversation', 'content')
-    return 'Dust did not return a conversation. Please check the API response and try again.' if messages.nil? || messages.empty?
+  def get_response_with_retries(conversation_id, max_retries = 3)
+    retries = 0
 
-    agent_messages = messages.flatten.select { |msg| msg['type'] == 'agent_message' }
+    while retries < max_retries
+      begin
+        @logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
+        response = get_response(conversation_id)
+
+        # If we get a meaningful response (not an error message), return it
+        return response unless response.include?('Dust agent did not respond') || response.include?('empty response')
+
+        if retries < max_retries - 1
+          wait_time = (retries + 1) * 3 # Progressive backoff: 3s, 6s, 9s
+          @logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
+          sleep(wait_time)
+        end
+
+        retries += 1
+      rescue StandardError => e
+        @logger.warn "Error fetching response (attempt #{retries + 1}): #{e.message}"
+        retries += 1
+        sleep(2) if retries < max_retries
+      end
+    end
+
+    @logger.error "Agent did not respond after #{max_retries} attempts"
+    'Dust agent did not respond after multiple attempts. The agent may be busy or misconfigured.'
+  end
+
+  def extract_content(api_response)
+    @logger.debug "Full Dust API response: #{api_response.inspect}"
+
+    messages = api_response.dig('conversation', 'content')
+    if messages.nil? || messages.empty?
+      @logger.warn "No conversation content found. API response keys: #{api_response.keys}"
+      return 'Dust did not return a conversation. Please check the API response and try again.'
+    end
+
+    @logger.debug "Found #{messages.length} messages in conversation"
+
+    # Handle different message structures
+    all_messages = messages.is_a?(Array) ? messages.flatten : [messages]
+    agent_messages = all_messages.select { |msg| msg&.dig('type') == 'agent_message' }
+
+    @logger.debug "Found #{agent_messages.length} agent messages"
 
     if agent_messages.empty?
-      @logger.warn 'Dust returned no agent messages'
+      @logger.warn "No agent messages found. All message types: #{all_messages.filter_map { |m| m&.dig('type') }.uniq}"
       return 'Dust agent did not respond. Please check the agent configuration and try again.'
     end
 
-    content = agent_messages.last['content']
+    # Get the latest agent message content
+    latest_message = agent_messages.last
+    content = latest_message&.dig('content')
+
+    @logger.debug "Latest agent message content: #{content&.slice(0, 100)}..."
 
     if content.nil? || content.empty?
       @logger.warn 'Dust agent returned empty content'
@@ -449,7 +502,8 @@ end
 class LoggerFactory
   def self.create(output = $stdout)
     logger = Logger.new(output)
-    logger.level = ENV['DEBUG'] ? Logger::DEBUG : Logger::INFO
+    # Enable debug logging for Dust troubleshooting
+    logger.level = ENV['DEBUG'] || ENV['API_PROVIDER'] == 'dust' ? Logger::DEBUG : Logger::INFO
     logger.formatter = proc do |severity, datetime, _progname, msg|
       "[#{datetime.strftime('%Y-%m-%d %H:%M:%S')}] #{severity}: #{msg}\n"
     end
