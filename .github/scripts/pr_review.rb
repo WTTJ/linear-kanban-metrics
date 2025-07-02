@@ -49,7 +49,9 @@ class DustConfigValidator < Validator
     if config.dust_workspace_id.nil? || config.dust_workspace_id.empty?
       errors << 'DUST_WORKSPACE_ID environment variable is required for Dust API'
     end
-    errors << 'DUST_AGENT_ID environment variable is required for Dust API' if config.dust_agent_id.nil? || config.dust_agent_id.empty?
+    if config.dust_agent_id.nil? || config.dust_agent_id.empty?
+      errors << 'DUST_AGENT_ID environment variable is required for Dust API'
+    end
     errors
   end
 end
@@ -87,7 +89,7 @@ class ReviewerConfig
     @anthropic_api_key = env.fetch('ANTHROPIC_API_KEY', nil)
     @dust_api_key = env.fetch('DUST_API_KEY', nil)
     @dust_workspace_id = env.fetch('DUST_WORKSPACE_ID', nil)
-    @dust_agent_id = env.fetch('DUST_AGENT_ID', nil)
+    @dust_agent_id = env.fetch('DUST_AGENT_ID', nil)&.strip  # Strip whitespace
     @validation_service = validation_service
   end
 
@@ -379,7 +381,8 @@ class DustProvider < AIProvider
     }.to_json
 
     @logger.debug "Creating Dust conversation with prompt length: #{prompt.length} chars"
-    @logger.debug "Agent ID: #{@config.dust_agent_id}"
+    @logger.debug "Agent ID: '#{@config.dust_agent_id}' (length: #{@config.dust_agent_id&.length})"
+    @logger.debug "Mentions array: [{ configurationId: '#{@config.dust_agent_id}' }]"
     @http_client.post(uri, headers, body)
   end
 
@@ -429,19 +432,22 @@ class DustProvider < AIProvider
       - Agent being busy with other requests
       - Network timeout in CI/CD environment
       - Large prompt requiring more processing time
+      - Agent configuration issues (check mentions array)
       
       **Suggested Actions:**
       1. Re-run the workflow in a few minutes
-      2. Check agent status in Dust dashboard
-      3. Consider using the Anthropic provider as fallback
+      2. Check agent status in Dust dashboard: https://dust.tt/w/#{@config.dust_workspace_id}/assistant/conversations/#{conversation_id}
+      3. Verify agent ID has no trailing whitespace
+      4. Consider using the Anthropic provider as fallback
       
       **Debug Information:**
       - Conversation ID: #{conversation_id}
       - Workspace: #{@config.dust_workspace_id}
-      - Agent: #{@config.dust_agent_id}
+      - Agent: '#{@config.dust_agent_id}' (length: #{@config.dust_agent_id&.length})
       - Timestamp: #{Time.now}
       
       The conversation was created successfully but the agent did not generate a response within the timeout period.
+      Check the conversation in Dust dashboard for more details.
     FALLBACK
   end
 
