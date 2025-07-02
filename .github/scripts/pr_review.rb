@@ -316,20 +316,8 @@ class AnthropicProvider < AIProvider
   end
 end
 
-# Module for processing Dust API responses
-module DustResponseProcessor
-  def extract_content(api_response)
-    @logger.debug "Full Dust API response: #{api_response.inspect}"
-
-    messages = extract_messages_from_response(api_response)
-    return messages if messages.is_a?(String) # Error message
-
-    agent_messages = find_agent_messages(messages)
-    return agent_messages if agent_messages.is_a?(String) # Error message
-
-    extract_final_content_with_citations(agent_messages)
-  end
-
+# Module for extracting messages from Dust API responses
+module DustMessageExtractor
   def extract_messages_from_response(api_response)
     messages = api_response.dig('conversation', 'content')
     if messages.nil? || messages.empty?
@@ -355,6 +343,139 @@ module DustResponseProcessor
 
     agent_messages
   end
+end
+
+# Module for processing Dust citations
+module DustCitationProcessor
+  def format_response_with_citations(content, citations)
+    # Create a citation map for lookup
+    citation_map = build_citation_map(citations)
+
+    # Replace inline citation markers with numbered references
+    formatted_content = replace_citation_markers(content, citation_map)
+
+    # Add reference list at the end if we have citations
+    if citations.any?
+      formatted_content << "\n\n---\n\n**References:**\n"
+      citations.each_with_index do |citation, index|
+        formatted_content << "#{index + 1}. #{format_citation(citation)}\n"
+      end
+    end
+
+    formatted_content
+  end
+
+  def build_citation_map(citations)
+    # Build a map from citation IDs to citation objects
+    citation_map = {}
+    citations.each_with_index do |citation, index|
+      # Dust citations usually have an 'id' field
+      citation_map[citation['id']] = { citation: citation, index: index + 1 } if citation.is_a?(Hash) && citation['id']
+    end
+    citation_map
+  end
+
+  def replace_citation_markers(content, citation_map)
+    # Replace :cite[id] markers with numbered references [1], [2], etc.
+    content.gsub(/:cite\[([^\]]+)\]/) do |match|
+      cite_id = Regexp.last_match(1)
+      if citation_map[cite_id]
+        "[#{citation_map[cite_id][:index]}]"
+      else
+        # If citation ID not found, keep the original marker
+        match
+      end
+    end
+  end
+
+  def format_citation(citation)
+    case citation
+    when Hash
+      format_hash_citation(citation)
+    when String
+      citation
+    else
+      citation.to_s
+    end
+  end
+
+  private
+
+  def format_hash_citation(citation)
+    # Handle Dust's various citation formats
+    if citation['reference']
+      format_reference_citation(citation)
+    elsif citation['document']
+      format_document_citation(citation)
+    elsif citation['title'] || citation['url']
+      format_basic_citation(citation)
+    else
+      citation.to_s
+    end
+  end
+
+  def format_reference_citation(citation)
+    ref = citation['reference']
+    title = ref['title'] || 'Untitled'
+    url = ref['href']
+
+    if url
+      "[#{title}](#{url})"
+    else
+      title
+    end
+  end
+
+  def format_document_citation(citation)
+    doc = citation['document']
+    title = doc['title'] || doc['name'] || 'Document'
+    url = doc['url'] || doc['href']
+
+    if url
+      "[#{title}](#{url})"
+    else
+      title
+    end
+  end
+
+  def format_basic_citation(citation)
+    title = citation['title'] || citation['name'] || 'Reference'
+    url = citation['url'] || citation['href']
+    snippet = citation['snippet'] || citation['text']
+
+    parts = []
+    parts << if url
+               "[#{title}](#{url})"
+             else
+               title
+             end
+
+    if snippet && snippet.length > 10
+      # Add a snippet preview if available
+      clean_snippet = snippet.strip.gsub(/\s+/, ' ')[0..100]
+      parts << "\"#{clean_snippet}#{'...' if snippet.length > 100}\""
+    end
+
+    parts.join(' - ')
+  end
+end
+
+# Module for processing Dust API responses
+module DustResponseProcessor
+  include DustMessageExtractor
+  include DustCitationProcessor
+
+  def extract_content(api_response)
+    @logger.debug "Full Dust API response: #{api_response.inspect}"
+
+    messages = extract_messages_from_response(api_response)
+    return messages if messages.is_a?(String) # Error message
+
+    agent_messages = find_agent_messages(messages)
+    return agent_messages if agent_messages.is_a?(String) # Error message
+
+    extract_final_content_with_citations(agent_messages)
+  end
 
   def extract_final_content_with_citations(agent_messages)
     # Get the latest agent message content and citations
@@ -377,51 +498,6 @@ module DustResponseProcessor
       format_response_with_citations(content, citations)
     else
       content
-    end
-  end
-
-  def format_response_with_citations(content, citations)
-    # Format the response to include citations at the end
-    formatted_content = content.dup
-
-    if citations.any?
-      formatted_content << "\n\n---\n\n**References:**\n"
-      citations.each_with_index do |citation, index|
-        formatted_content << "#{index + 1}. #{format_citation(citation)}\n"
-      end
-    end
-
-    formatted_content
-  end
-
-  def format_citation(citation)
-    case citation
-    when Hash
-      format_hash_citation(citation)
-    when String
-      citation
-    else
-      citation.to_s
-    end
-  end
-
-  def format_hash_citation(citation)
-    if citation['reference']
-      format_reference_citation(citation)
-    else
-      citation.to_s
-    end
-  end
-
-  def format_reference_citation(citation)
-    ref = citation['reference']
-    title = ref['title'] || 'Untitled'
-    url = ref['href']
-
-    if url
-      "[#{title}](#{url})"
-    else
-      title
     end
   end
 end
