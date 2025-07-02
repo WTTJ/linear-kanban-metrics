@@ -8,45 +8,6 @@ require 'bundler/setup'
 require 'net/http'
 require 'json'
 
-# Citation formatting module
-module CitationFormatter
-  def display_citations(citations)
-    puts '📚 CITATIONS:'
-    puts '-' * 30
-    citations.each_with_index do |citation, index|
-      puts "#{index + 1}. #{format_citation(citation)}"
-    end
-    puts '-' * 30
-    puts
-  end
-
-  def format_citation(citation)
-    # Handle different citation formats that Dust might return
-    case citation
-    when Hash
-      format_hash_citation(citation)
-    when String
-      citation
-    else
-      citation.to_s
-    end
-  end
-
-  def format_hash_citation(citation)
-    # Common citation fields in Dust responses
-    title = citation['title'] || citation[:title]
-    url = citation['url'] || citation[:url]
-    snippet = citation['snippet'] || citation[:snippet]
-
-    parts = []
-    parts << title if title
-    parts << url if url
-    parts << "\"#{snippet[0..100]}...\"" if snippet && snippet.length > 10
-
-    parts.join(' - ')
-  end
-end
-
 # Load environment variables from config/.env.test
 def load_env_file
   env_file = File.join(__dir__, '..', '..', 'config', '.env.test')
@@ -68,8 +29,6 @@ end
 
 # Simple HTTP client for Dust API
 class DustAPIClient
-  include CitationFormatter
-
   API_BASE_URL = 'https://dust.tt'
 
   def initialize(api_key, workspace_id, agent_id, logger)
@@ -110,7 +69,7 @@ class DustAPIClient
 
   def evaluate_test_response(response)
     # rubocop:enable Naming/PredicateMethod
-    if response_valid?(response)
+    if response && !response.empty? && !response.include?('did not respond')
       display_successful_response(response)
       true
     else
@@ -119,48 +78,21 @@ class DustAPIClient
     end
   end
 
-  def response_valid?(response)
-    return false unless response.is_a?(Hash)
-
-    content = response[:content] || response['content']
-    content && !content.empty? && !content.include?('did not respond')
-  end
-
   def display_successful_response(response)
     @logger.info '✅ Response received!'
     puts "\n#{'=' * 60}"
     puts '🤖 DUST AI RESPONSE:'
     puts '=' * 60
     puts
-
-    # Extract content and citations
-    content = response[:content] || response['content']
-    citations = response[:citations] || response['citations'] || []
-
-    # Display the main content
-    puts content
+    puts response
     puts
-
-    # Display citations if present
-    display_citations(citations) if citations.any?
-
     puts '=' * 60
-    puts "📏 Response length: #{content.length} characters"
-    puts "📚 Citations found: #{citations.length}" if citations.any?
+    puts "📏 Response length: #{response.length} characters"
   end
 
   def handle_response_failure(response)
     @logger.error '❌ No response received from agent'
-
-    case response
-    when Hash
-      content = response[:content] || response['content']
-      @logger.error "Response content: #{content}" if content
-    when String
-      @logger.error "Response content: #{response}"
-    else
-      @logger.error "Unexpected response type: #{response.class}"
-    end
+    @logger.error "Response content: #{response}" if response
   end
 
   private
@@ -234,16 +166,8 @@ class DustAPIClient
 
   def extract_message_content(message)
     content = message&.dig('content')
-    citations = message&.dig('citations') || []
-
     @logger.debug "Latest agent message content: #{content&.slice(0, 100)}..." if content
-    @logger.debug "Found #{citations.length} citations" if citations.any?
-
-    # Return both content and citations
-    {
-      content: content,
-      citations: citations
-    }
+    content
   end
 
   # Add retry logic similar to PR review script
@@ -251,53 +175,29 @@ class DustAPIClient
     retries = 0
 
     while retries < max_retries
-      response = attempt_get_response(conversation_id, retries, max_retries)
-      return response if response_has_content?(response)
+      begin
+        @logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
+        response = get_response(conversation_id)
 
-      handle_retry_wait(retries, max_retries)
-      retries += 1
+        # If we get a meaningful response (not an error message), return it
+        return response unless response.nil? || response.empty?
+
+        if retries < max_retries - 1
+          wait_time = (retries + 1) * 3 # Progressive backoff: 3s, 6s, 9s
+          @logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
+          sleep(wait_time)
+        end
+
+        retries += 1
+      rescue StandardError => e
+        @logger.error "Error fetching response (attempt #{retries + 1}): #{e.message}"
+        retries += 1
+        sleep(2) if retries < max_retries
+      end
     end
 
-    create_no_response_result(max_retries)
-  end
-
-  def attempt_get_response(conversation_id, retries, max_retries)
-    @logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
-    response = get_response(conversation_id)
-
-    if response_has_content?(response)
-      @logger.debug 'Received valid response with content'
-      return response
-    end
-
-    response
-  rescue StandardError => e
-    @logger.error "Error fetching response (attempt #{retries + 1}): #{e.message}"
-    sleep(2) if retries < max_retries - 1
-    nil
-  end
-
-  def handle_retry_wait(retries, max_retries)
-    return unless retries < max_retries - 1
-
-    wait_time = (retries + 1) * 3 # Progressive backoff: 3s, 6s, 9s
-    @logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
-    sleep(wait_time)
-  end
-
-  def create_no_response_result(max_retries)
     @logger.error "Agent did not respond after #{max_retries} attempts"
-    {
-      content: 'Dust agent did not respond after multiple attempts. The agent may be busy or misconfigured.',
-      citations: []
-    }
-  end
-
-  def response_has_content?(response)
-    return false unless response.is_a?(Hash)
-
-    content = response[:content] || response['content']
-    content && !content.empty? && !content.strip.empty?
+    'Dust agent did not respond after multiple attempts. The agent may be busy or misconfigured.'
   end
 
   def make_request(uri, method, headers, body = nil)
@@ -398,20 +298,11 @@ def display_configuration
   puts '✅ Configuration loaded:'
   puts "   Workspace ID: #{ENV.fetch('DUST_WORKSPACE_ID', nil)}"
   puts "   Agent ID: #{ENV.fetch('DUST_AGENT_ID', nil)}"
-  puts "   API Key: #{mask_api_key(ENV.fetch('DUST_API_KEY', nil))}"
+  puts "   API Key: #{ENV['DUST_API_KEY'][0..8]}..." if ENV['DUST_API_KEY']
 
   debug_mode = ENV['DEBUG'] == 'true'
   puts "   Debug Mode: #{debug_mode ? 'ON' : 'OFF'}"
   puts
-end
-
-def mask_api_key(api_key)
-  return 'Not set' if api_key.nil? || api_key.empty?
-
-  # Only show last 4 characters for identification, mask the rest
-  return '****' if api_key.length <= 4
-
-  "****#{api_key[-4..]}"
 end
 
 def create_client
