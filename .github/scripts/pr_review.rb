@@ -49,9 +49,7 @@ class DustConfigValidator < Validator
     if config.dust_workspace_id.nil? || config.dust_workspace_id.empty?
       errors << 'DUST_WORKSPACE_ID environment variable is required for Dust API'
     end
-    if config.dust_agent_id.nil? || config.dust_agent_id.empty?
-      errors << 'DUST_AGENT_ID environment variable is required for Dust API'
-    end
+    errors << 'DUST_AGENT_ID environment variable is required for Dust API' if config.dust_agent_id.nil? || config.dust_agent_id.empty?
     errors
   end
 end
@@ -89,7 +87,7 @@ class ReviewerConfig
     @anthropic_api_key = env.fetch('ANTHROPIC_API_KEY', nil)
     @dust_api_key = env.fetch('DUST_API_KEY', nil)
     @dust_workspace_id = env.fetch('DUST_WORKSPACE_ID', nil)
-    @dust_agent_id = env.fetch('DUST_AGENT_ID', nil)&.strip  # Strip whitespace
+    @dust_agent_id = env.fetch('DUST_AGENT_ID', nil)&.strip # Strip whitespace
     @validation_service = validation_service
   end
 
@@ -363,7 +361,7 @@ class DustProvider < AIProvider
       'Authorization' => "Bearer #{@config.dust_api_key}",
       'Content-Type' => 'application/json'
     }
-    
+
     # Try alternative mention format - sometimes helps with agent triggering
     body = {
       message: {
@@ -399,53 +397,64 @@ class DustProvider < AIProvider
     retries = 0
 
     while retries < max_retries
-      begin
-        @logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
-        response = get_response(conversation_id)
+      response = attempt_fetch_response(conversation_id, retries, max_retries)
+      return response if response_is_valid?(response)
 
-        # If we get a meaningful response (not an error message), return it
-        return response unless response.include?('Dust agent did not respond') || response.include?('empty response')
-
-        if retries < max_retries - 1
-          wait_time = (retries + 1) * 5 # Longer wait: 5s, 10s, 15s, 20s
-          @logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
-          sleep(wait_time)
-        end
-
-        retries += 1
-      rescue StandardError => e
-        @logger.warn "Error fetching response (attempt #{retries + 1}): #{e.message}"
-        retries += 1
-        sleep(3) if retries < max_retries
-      end
+      handle_retry_delay(retries, max_retries)
+      retries += 1
     end
 
     @logger.error "Agent did not respond after #{max_retries} attempts with longer timeouts"
-    
-    # Provide a more helpful fallback message for GitHub Actions
+    create_fallback_message(conversation_id)
+  end
+
+  def attempt_fetch_response(conversation_id, retries, max_retries)
+    @logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
+    get_response(conversation_id)
+  rescue StandardError => e
+    @logger.warn "Error fetching response (attempt #{retries + 1}): #{e.message}"
+    raise e if retries >= max_retries - 1
+
+    sleep(3)
+    'retry_needed'
+  end
+
+  def response_is_valid?(response)
+    !response.include?('Dust agent did not respond') && !response.include?('empty response') && response != 'retry_needed'
+  end
+
+  def handle_retry_delay(retries, max_retries)
+    return unless retries < max_retries - 1
+
+    wait_time = (retries + 1) * 5 # Longer wait: 5s, 10s, 15s, 20s
+    @logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
+    sleep(wait_time)
+  end
+
+  def create_fallback_message(conversation_id)
     <<~FALLBACK
       ## PR Review Status
-      
+
       ⚠️ **Dust AI agent did not respond after multiple attempts**
-      
+
       This may be due to:
       - Agent being busy with other requests
       - Network timeout in CI/CD environment
       - Large prompt requiring more processing time
       - Agent configuration issues (check mentions array)
-      
+
       **Suggested Actions:**
       1. Re-run the workflow in a few minutes
-      2. Check agent status in Dust dashboard: https://dust.tt/w/#{@config.dust_workspace_id}/assistant/conversations/#{conversation_id}
+      2. Check agent status in Dust dashboard: https://dust.tt/w/#{@config.dust_workspace_id}/assistant/#{conversation_id}
       3. Verify agent ID has no trailing whitespace
       4. Consider using the Anthropic provider as fallback
-      
+
       **Debug Information:**
       - Conversation ID: #{conversation_id}
       - Workspace: #{@config.dust_workspace_id}
       - Agent: '#{@config.dust_agent_id}' (length: #{@config.dust_agent_id&.length})
       - Timestamp: #{Time.now}
-      
+
       The conversation was created successfully but the agent did not generate a response within the timeout period.
       Check the conversation in Dust dashboard for more details.
     FALLBACK
@@ -454,6 +463,16 @@ class DustProvider < AIProvider
   def extract_content(api_response)
     @logger.debug "Full Dust API response: #{api_response.inspect}"
 
+    messages = extract_messages_from_response(api_response)
+    return messages if messages.is_a?(String) # Error message
+
+    agent_messages = find_agent_messages(messages)
+    return agent_messages if agent_messages.is_a?(String) # Error message
+
+    extract_final_content_with_citations(agent_messages)
+  end
+
+  def extract_messages_from_response(api_response)
     messages = api_response.dig('conversation', 'content')
     if messages.nil? || messages.empty?
       @logger.warn "No conversation content found. API response keys: #{api_response.keys}"
@@ -461,7 +480,10 @@ class DustProvider < AIProvider
     end
 
     @logger.debug "Found #{messages.length} messages in conversation"
+    messages
+  end
 
+  def find_agent_messages(messages)
     # Handle different message structures
     all_messages = messages.is_a?(Array) ? messages.flatten : [messages]
     agent_messages = all_messages.select { |msg| msg&.dig('type') == 'agent_message' }
@@ -473,11 +495,17 @@ class DustProvider < AIProvider
       return 'Dust agent did not respond. Please check the agent configuration and try again.'
     end
 
-    # Get the latest agent message content
+    agent_messages
+  end
+
+  def extract_final_content_with_citations(agent_messages)
+    # Get the latest agent message content and citations
     latest_message = agent_messages.last
     content = latest_message&.dig('content')
+    citations = latest_message&.dig('citations') || []
 
     @logger.debug "Latest agent message content: #{content&.slice(0, 100)}..."
+    @logger.debug "Found #{citations.length} citations" if citations.any?
 
     if content.nil? || content.empty?
       @logger.warn 'Dust agent returned empty content'
@@ -485,7 +513,51 @@ class DustProvider < AIProvider
     end
 
     @logger.info 'Successfully received review from Dust AI'
-    content
+
+    # Return content with citations metadata if available
+    if citations.any?
+      format_response_with_citations(content, citations)
+    else
+      content
+    end
+  end
+
+  def format_response_with_citations(content, citations)
+    # Format the response to include citations at the end
+    formatted_content = content.dup
+
+    if citations.any?
+      formatted_content << "\n\n---\n\n**References:**\n"
+      citations.each_with_index do |citation, index|
+        formatted_content << "#{index + 1}. #{format_citation(citation)}\n"
+      end
+    end
+
+    formatted_content
+  end
+
+  def format_citation(citation)
+    case citation
+    when Hash
+      format_hash_citation(citation)
+    when String
+      citation
+    else
+      citation.to_s
+    end
+  end
+
+  def format_hash_citation(citation)
+    title = citation['title'] || citation[:title]
+    url = citation['url'] || citation[:url]
+    snippet = citation['snippet'] || citation[:snippet]
+
+    parts = []
+    parts << title if title
+    parts << url if url
+    parts << "\"#{snippet[0..100]}...\"" if snippet && snippet.length > 10
+
+    parts.join(' - ')
   end
 end
 

@@ -166,13 +166,65 @@ def handle_agent_messages(messages)
 
   if agent_messages.any?
     puts "✅ Agent responded! (#{agent_messages.length} messages)"
-    content = agent_messages.last&.dig('content')
-    puts "📝 Response preview: #{content&.slice(0, 200)}..."
+    latest_message = agent_messages.last
+
+    content = latest_message&.dig('content')
+    citations = latest_message&.dig('citations') || []
+
+    display_agent_response(content, citations)
     true
   else
     display_no_agent_response(messages)
     false
   end
+end
+
+def display_agent_response(content, citations)
+  puts "\n#{'=' * 60}"
+  puts '🤖 DUST AI RESPONSE:'
+  puts '=' * 60
+  puts
+  puts content
+  puts
+
+  # Display citations if present
+  if citations.any?
+    puts '📚 CITATIONS:'
+    puts '-' * 30
+    citations.each_with_index do |citation, index|
+      puts "#{index + 1}. #{format_citation(citation)}"
+    end
+    puts '-' * 30
+    puts
+  end
+
+  puts '=' * 60
+  puts "📏 Response length: #{content.length} characters"
+  puts "📚 Citations found: #{citations.length}" if citations.any?
+end
+
+def format_citation(citation)
+  case citation
+  when Hash
+    format_hash_citation(citation)
+  when String
+    citation
+  else
+    citation.to_s
+  end
+end
+
+def format_hash_citation(citation)
+  title = citation['title'] || citation[:title]
+  url = citation['url'] || citation[:url]
+  snippet = citation['snippet'] || citation[:snippet]
+
+  parts = []
+  parts << title if title
+  parts << url if url
+  parts << "\"#{snippet[0..100]}...\"" if snippet && snippet.length > 10
+
+  parts.join(' - ')
 end
 
 def display_no_agent_response(messages)
