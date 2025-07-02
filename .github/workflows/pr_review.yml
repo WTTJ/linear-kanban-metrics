@@ -34,7 +34,11 @@ jobs:
       - name: Run AI Review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API_PROVIDER: ${{ env.API_PROVIDER || 'dust' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DUST_API_KEY: ${{ secrets.DUST_API_KEY }}
+          DUST_WORKSPACE_ID: ${{ env.DUST_WORKSPACE_ID }}
+          DUST_AGENT_ID: ${{ env.DUST_AGENT_ID }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: bundle exec ruby .github/scripts/pr_review.rb
