@@ -316,8 +316,119 @@ class AnthropicProvider < AIProvider
   end
 end
 
+# Module for processing Dust API responses
+module DustResponseProcessor
+  def extract_content(api_response)
+    @logger.debug "Full Dust API response: #{api_response.inspect}"
+
+    messages = extract_messages_from_response(api_response)
+    return messages if messages.is_a?(String) # Error message
+
+    agent_messages = find_agent_messages(messages)
+    return agent_messages if agent_messages.is_a?(String) # Error message
+
+    extract_final_content_with_citations(agent_messages)
+  end
+
+  def extract_messages_from_response(api_response)
+    messages = api_response.dig('conversation', 'content')
+    if messages.nil? || messages.empty?
+      @logger.warn "No conversation content found. API response keys: #{api_response.keys}"
+      return 'Dust did not return a conversation. Please check the API response and try again.'
+    end
+
+    @logger.debug "Found #{messages.length} messages in conversation"
+    messages
+  end
+
+  def find_agent_messages(messages)
+    # Handle different message structures
+    all_messages = messages.is_a?(Array) ? messages.flatten : [messages]
+    agent_messages = all_messages.select { |msg| msg&.dig('type') == 'agent_message' }
+
+    @logger.debug "Found #{agent_messages.length} agent messages"
+
+    if agent_messages.empty?
+      @logger.warn "No agent messages found. All message types: #{all_messages.filter_map { |m| m&.dig('type') }.uniq}"
+      return 'Dust agent did not respond. Please check the agent configuration and try again.'
+    end
+
+    agent_messages
+  end
+
+  def extract_final_content_with_citations(agent_messages)
+    # Get the latest agent message content and citations
+    latest_message = agent_messages.last
+    content = latest_message&.dig('content')
+    citations = latest_message&.dig('citations') || []
+
+    @logger.debug "Latest agent message content: #{content&.slice(0, 100)}..."
+    @logger.debug "Found #{citations.length} citations" if citations.any?
+
+    if content.nil? || content.empty?
+      @logger.warn 'Dust agent returned empty content'
+      return 'Dust agent returned an empty response. Please check the agent configuration and try again.'
+    end
+
+    @logger.info 'Successfully received review from Dust AI'
+
+    # Return content with citations metadata if available
+    if citations.any?
+      format_response_with_citations(content, citations)
+    else
+      content
+    end
+  end
+
+  def format_response_with_citations(content, citations)
+    # Format the response to include citations at the end
+    formatted_content = content.dup
+
+    if citations.any?
+      formatted_content << "\n\n---\n\n**References:**\n"
+      citations.each_with_index do |citation, index|
+        formatted_content << "#{index + 1}. #{format_citation(citation)}\n"
+      end
+    end
+
+    formatted_content
+  end
+
+  def format_citation(citation)
+    case citation
+    when Hash
+      format_hash_citation(citation)
+    when String
+      citation
+    else
+      citation.to_s
+    end
+  end
+
+  def format_hash_citation(citation)
+    if citation['reference']
+      format_reference_citation(citation)
+    else
+      citation.to_s
+    end
+  end
+
+  def format_reference_citation(citation)
+    ref = citation['reference']
+    title = ref['title'] || 'Untitled'
+    url = ref['href']
+
+    if url
+      "[#{title}](#{url})"
+    else
+      title
+    end
+  end
+end
+
 # Dust AI provider
 class DustProvider < AIProvider
+  include DustResponseProcessor
   API_BASE_URL = 'https://dust.tt'
 
   def initialize(config, http_client, logger)
@@ -420,7 +531,14 @@ class DustProvider < AIProvider
   end
 
   def response_is_valid?(response)
-    !response.include?('Dust agent did not respond') && !response.include?('empty response') && response != 'retry_needed'
+    # Check if response is an error message
+    return false if response.include?('Dust agent did not respond')
+    return false if response.include?('empty response')
+    return false if response.include?('did not return a conversation')
+    return false if response == 'retry_needed'
+
+    # If we get here, it's a valid response (actual review content)
+    true
   end
 
   def handle_retry_delay(retries, max_retries)
@@ -458,106 +576,6 @@ class DustProvider < AIProvider
       The conversation was created successfully but the agent did not generate a response within the timeout period.
       Check the conversation in Dust dashboard for more details.
     FALLBACK
-  end
-
-  def extract_content(api_response)
-    @logger.debug "Full Dust API response: #{api_response.inspect}"
-
-    messages = extract_messages_from_response(api_response)
-    return messages if messages.is_a?(String) # Error message
-
-    agent_messages = find_agent_messages(messages)
-    return agent_messages if agent_messages.is_a?(String) # Error message
-
-    extract_final_content_with_citations(agent_messages)
-  end
-
-  def extract_messages_from_response(api_response)
-    messages = api_response.dig('conversation', 'content')
-    if messages.nil? || messages.empty?
-      @logger.warn "No conversation content found. API response keys: #{api_response.keys}"
-      return 'Dust did not return a conversation. Please check the API response and try again.'
-    end
-
-    @logger.debug "Found #{messages.length} messages in conversation"
-    messages
-  end
-
-  def find_agent_messages(messages)
-    # Handle different message structures
-    all_messages = messages.is_a?(Array) ? messages.flatten : [messages]
-    agent_messages = all_messages.select { |msg| msg&.dig('type') == 'agent_message' }
-
-    @logger.debug "Found #{agent_messages.length} agent messages"
-
-    if agent_messages.empty?
-      @logger.warn "No agent messages found. All message types: #{all_messages.filter_map { |m| m&.dig('type') }.uniq}"
-      return 'Dust agent did not respond. Please check the agent configuration and try again.'
-    end
-
-    agent_messages
-  end
-
-  def extract_final_content_with_citations(agent_messages)
-    # Get the latest agent message content and citations
-    latest_message = agent_messages.last
-    content = latest_message&.dig('content')
-    citations = latest_message&.dig('citations') || []
-
-    @logger.debug "Latest agent message content: #{content&.slice(0, 100)}..."
-    @logger.debug "Found #{citations.length} citations" if citations.any?
-
-    if content.nil? || content.empty?
-      @logger.warn 'Dust agent returned empty content'
-      return 'Dust agent returned an empty response. Please check the agent configuration and try again.'
-    end
-
-    @logger.info 'Successfully received review from Dust AI'
-
-    # Return content with citations metadata if available
-    if citations.any?
-      format_response_with_citations(content, citations)
-    else
-      content
-    end
-  end
-
-  def format_response_with_citations(content, citations)
-    # Format the response to include citations at the end
-    formatted_content = content.dup
-
-    if citations.any?
-      formatted_content << "\n\n---\n\n**References:**\n"
-      citations.each_with_index do |citation, index|
-        formatted_content << "#{index + 1}. #{format_citation(citation)}\n"
-      end
-    end
-
-    formatted_content
-  end
-
-  def format_citation(citation)
-    case citation
-    when Hash
-      format_hash_citation(citation)
-    when String
-      citation
-    else
-      citation.to_s
-    end
-  end
-
-  def format_hash_citation(citation)
-    title = citation['title'] || citation[:title]
-    url = citation['url'] || citation[:url]
-    snippet = citation['snippet'] || citation[:snippet]
-
-    parts = []
-    parts << title if title
-    parts << url if url
-    parts << "\"#{snippet[0..100]}...\"" if snippet && snippet.length > 10
-
-    parts.join(' - ')
   end
 end
 
