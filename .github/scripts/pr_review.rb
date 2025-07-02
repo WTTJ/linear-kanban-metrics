@@ -437,9 +437,27 @@ module DustCitationProcessor
   end
 
   def build_citation_mapping(citation_ids, citations)
-    citation_ids.each_with_index.with_object({}) do |(citation_id, index), mapping|
-      mapping[citation_id] = index + 1 if index < citations.length
+    mapping = {}
+    ref_counter = 1
+
+    citation_ids.each do |citation_id|
+      # Try different possible fields for the citation ID
+      matching_citation = citations.find do |c|
+        c['reference'] == citation_id || # Direct reference field
+          c['id'] == citation_id ||            # ID field
+          c['reference_id'] == citation_id ||  # Reference ID field
+          c['cite_id'] == citation_id ||       # Cite ID field
+          (c['reference'].is_a?(Hash) && c['reference']['id'] == citation_id) # Nested ID in reference
+      end
+
+      if matching_citation
+        mapping[citation_id] = ref_counter
+        ref_counter += 1
+      end
     end
+
+    logger.debug "Citation mapping attempt - IDs: #{citation_ids}, found matches: #{mapping.keys}"
+    mapping
   end
 
   def log_citation_mapping(mapping)
