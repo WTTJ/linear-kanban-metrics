@@ -75,16 +75,16 @@ module CitationFormatter
     snippet = citation['snippet'] || citation['text']
 
     parts = []
-    if url
-      parts << "[#{title}](#{url})"
-    else
-      parts << title
-    end
-    
+    parts << if url
+               "[#{title}](#{url})"
+             else
+               title
+             end
+
     if snippet && snippet.length > 10
       # Add a snippet preview if available
       clean_snippet = snippet.strip.gsub(/\s+/, ' ')[0..100]
-      parts << "\"#{clean_snippet}#{snippet.length > 100 ? '...' : ''}\""
+      parts << "\"#{clean_snippet}#{'...' if snippet.length > 100}\""
     end
 
     parts.join(' - ')
@@ -95,9 +95,7 @@ module CitationFormatter
     citation_map = {}
     citations.each_with_index do |citation, index|
       # Dust citations usually have an 'id' field
-      if citation.is_a?(Hash) && citation['id']
-        citation_map[citation['id']] = index + 1
-      end
+      citation_map[citation['id']] = index + 1 if citation.is_a?(Hash) && citation['id']
     end
 
     # Replace :cite[id] markers with numbered references [1], [2], etc.
@@ -133,6 +131,7 @@ def load_env_file
 end
 
 # Simple HTTP client for Dust API
+# rubocop:disable Metrics/ClassLength
 class DustAPIClient
   include CitationFormatter
 
@@ -401,6 +400,7 @@ class DustAPIClient
     raise StandardError, "Invalid JSON response: #{e.message}"
   end
 end
+# rubocop:enable Metrics/ClassLength
 
 # Simple logger
 class SimpleLogger

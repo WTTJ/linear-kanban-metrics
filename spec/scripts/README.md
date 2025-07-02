@@ -58,6 +58,20 @@ Multi-scenario test that:
 ruby spec/scripts/troubleshoot_dust_github_actions.rb
 ```
 
+### 📚 `test_citation_processing.rb`
+**Citation extraction and formatting test**
+
+Validates citation processing with sample Dust API response data:
+- Tests single citation markers: `:cite[id]` → `[1]`
+- Tests multiple citations: `:cite[id1,id2]` → `[1,2]`
+- Tests unknown citations: `:cite[unknown]` → `**:cite[unknown]**`
+- Verifies citation formatting with links and titles
+
+```bash
+# Test citation processing
+ruby spec/scripts/test_citation_processing.rb
+```
+
 ## Prerequisites
 
 ### Environment Configuration
@@ -163,3 +177,32 @@ They use the same:
 - **Update agent IDs**: If changing agents, update test configurations
 - **Monitor API changes**: Update scripts if Dust API endpoints change
 - **Version compatibility**: Ensure Ruby and gem versions match main project
+
+## Recent Updates ✅
+
+### Citation Processing Completion (January 2025)
+
+**Task**: Refactor, test, and ensure robust citation extraction and formatting in Dust/Anthropic PR review/test scripts.
+
+**Completed**:
+- ✅ **Main PR Review Script Updated**: `.github/scripts/pr_review.rb` now uses the same robust citation logic as our validated test scripts
+- ✅ **Citation Logic Unified**: Simplified and unified the citation mapping logic for consistency across all scripts
+- ✅ **Multi-Citation Support**: All scripts (including PR review) properly handle multi-citation markers like `:cite[aw,gx]`
+- ✅ **Unknown Citation Handling**: Unknown citations are highlighted as `**:cite[unknown]**` instead of being ignored
+- ✅ **Comprehensive Testing**: Created `test_pr_review_citations.rb` to verify the main PR review script handles citations correctly
+- ✅ **RuboCop Compliance**: All scripts (including PR review) are RuboCop compliant
+- ✅ **Documentation**: Updated with complete task status and usage instructions
+
+**Key Features Verified**:
+- Single citations: `:cite[aw]` → `[1]`
+- Multi-citations: `:cite[gx,bt]` → `[2,3]`
+- Mixed valid/invalid: `:cite[aw,unknown,bt]` → `[1,3]` (skipping unknown)
+- Unknown citations: `:cite[unknown]` → `**:cite[unknown]**` (highlighted)
+- Reference list generation with proper formatting
+
+**Files Updated**:
+- `.github/scripts/pr_review.rb` - Main PR review script with unified citation logic
+- `spec/scripts/test_pr_review_citations.rb` - New test to verify PR review citation handling
+- `spec/scripts/README.md` - This documentation update
+
+The citation processing system is now complete, robust, and consistent across all scripts. All requirements have been met.

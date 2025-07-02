@@ -366,11 +366,11 @@ module DustCitationProcessor
   end
 
   def build_citation_map(citations)
-    # Build a map from citation IDs to citation objects
+    # Build a map from citation IDs to citation indices (1-based)
     citation_map = {}
     citations.each_with_index do |citation, index|
       # Dust citations usually have an 'id' field
-      citation_map[citation['id']] = { citation: citation, index: index + 1 } if citation.is_a?(Hash) && citation['id']
+      citation_map[citation['id']] = index + 1 if citation.is_a?(Hash) && citation['id']
     end
     citation_map
   end
@@ -380,12 +380,12 @@ module DustCitationProcessor
     content.gsub(/:cite\[([^\]]+)\]/) do |match|
       cite_ids_string = Regexp.last_match(1)
       cite_ids = cite_ids_string.split(',').map(&:strip)
-      
+
       # Process each citation ID and collect valid references
       references = cite_ids.filter_map do |cite_id|
-        citation_map[cite_id][:index] if citation_map[cite_id]
+        citation_map[cite_id] if citation_map[cite_id]
       end
-      
+
       if references.any?
         # Format as [1], [1,2], or [1,2,3] etc.
         "[#{references.join(',')}]"

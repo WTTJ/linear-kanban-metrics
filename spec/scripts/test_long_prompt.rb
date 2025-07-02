@@ -80,6 +80,7 @@ def create_test_prompt
     +   end
     + end
     ```
+    Give references to the coding standards and design patterns above with links to the relevant sections.
 
     Please provide your review in markdown format.
   PROMPT
@@ -152,6 +153,7 @@ end
 def process_conversation_response(response)
   return false unless response.code == '200'
 
+  p JSON.pretty_generate(JSON.parse(response.body))
   conv_data = JSON.parse(response.body)
   messages = conv_data.dig('conversation', 'content')
 
@@ -180,31 +182,44 @@ def handle_agent_messages(messages)
 end
 
 def display_agent_response(content, citations)
+  display_response_header
+  processed_content = process_and_display_content(content, citations)
+  display_citations_if_present(citations)
+  display_response_summary(content, processed_content, citations)
+end
+
+def display_response_header
   puts "\n#{'=' * 60}"
   puts '🤖 DUST AI RESPONSE:'
   puts '=' * 60
   puts
+end
 
+def process_and_display_content(content, citations)
   # Process citation markers in content
   processed_content = citations.any? ? process_citation_markers(content, citations) : content
   puts processed_content
   puts
+  processed_content
+end
 
-  # Display citations if present
-  if citations.any?
-    puts '📚 CITATIONS:'
-    puts '-' * 30
-    citations.each_with_index do |citation, index|
-      puts "#{index + 1}. #{format_citation(citation)}"
-    end
-    puts '-' * 30
-    puts
+def display_citations_if_present(citations)
+  return unless citations.any?
+
+  puts '📚 CITATIONS:'
+  puts '-' * 30
+  citations.each_with_index do |citation, index|
+    puts "#{index + 1}. #{format_citation(citation)}"
   end
+  puts '-' * 30
+  puts
+end
 
+def display_response_summary(content, processed_content, citations)
   puts '=' * 60
   puts "📏 Response length: #{content.length} characters"
-  puts "� Processed length: #{processed_content.length} characters"
-  puts "�📚 Citations found: #{citations.length}" if citations.any?
+  puts "📏 Processed length: #{processed_content.length} characters"
+  puts "📚 Citations found: #{citations.length}" if citations.any?
 end
 
 def process_citation_markers(content, citations)
@@ -212,18 +227,24 @@ def process_citation_markers(content, citations)
   citation_map = {}
   citations.each_with_index do |citation, index|
     # Dust citations usually have an 'id' field
-    if citation.is_a?(Hash) && citation['id']
-      citation_map[citation['id']] = index + 1
-    end
+    citation_map[citation['id']] = index + 1 if citation.is_a?(Hash) && citation['id']
   end
 
-  # Replace :cite[id] markers with numbered references [1], [2], etc.
+  # Replace :cite[id] or :cite[id1,id2,...] markers with numbered references
   content.gsub(/:cite\[([^\]]+)\]/) do |match|
-    cite_id = Regexp.last_match(1)
-    if citation_map[cite_id]
-      "[#{citation_map[cite_id]}]"
+    cite_ids_string = Regexp.last_match(1)
+    cite_ids = cite_ids_string.split(',').map(&:strip)
+
+    # Process each citation ID and collect valid references
+    references = cite_ids.filter_map do |cite_id|
+      citation_map[cite_id] if citation_map[cite_id]
+    end
+
+    if references.any?
+      # Format as [1], [1,2], or [1,2,3] etc.
+      "[#{references.join(',')}]"
     else
-      # If citation ID not found, keep the original marker but make it more visible
+      # If no citation IDs found, keep the original marker but make it more visible
       "**#{match}**"
     end
   end
@@ -283,16 +304,16 @@ def format_basic_citation(citation)
   snippet = citation['snippet'] || citation['text']
 
   parts = []
-  if url
-    parts << "[#{title}](#{url})"
-  else
-    parts << title
-  end
-  
+  parts << if url
+             "[#{title}](#{url})"
+           else
+             title
+           end
+
   if snippet && snippet.length > 10
     # Add a snippet preview if available
     clean_snippet = snippet.strip.gsub(/\s+/, ' ')[0..100]
-    parts << "\"#{clean_snippet}#{snippet.length > 100 ? '...' : ''}\""
+    parts << "\"#{clean_snippet}#{'...' if snippet.length > 100}\""
   end
 
   parts.join(' - ')
