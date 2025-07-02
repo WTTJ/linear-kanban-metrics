@@ -356,9 +356,10 @@ module DustCitationProcessor
 
     # Add reference list at the end if we have citations
     if citations.any?
-      formatted_content << "\n\n---\n\n**References:**\n"
+      formatted_content << "\n\n---\n\n**References:**\n\n"
       citations.each_with_index do |citation, index|
-        formatted_content << "#{index + 1}. #{format_citation(citation)}\n"
+        ref_number = index + 1
+        formatted_content << "<a id=\"ref-#{ref_number}\"></a>#{ref_number}. #{format_citation(citation)}\n\n"
       end
     end
 
@@ -387,8 +388,13 @@ module DustCitationProcessor
       end
 
       if references.any?
-        # Format as [1], [1,2], or [1,2,3] etc.
-        "[#{references.join(',')}]"
+        # Format as markdown superscript-style reference links
+        if references.length == 1
+          "<sup>[#{references.first}](#ref-#{references.first})</sup>"
+        else
+          ref_links = references.map { |ref| "[#{ref}](#ref-#{ref})" }
+          "<sup>#{ref_links.join(',')}</sup>"
+        end
       else
         # If no citation IDs found, keep the original marker but make it more visible
         "**#{match}**"

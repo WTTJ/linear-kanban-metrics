@@ -115,13 +115,13 @@ class RealDataCitationTestProcessor
     puts "\n✅ VERIFICATION RESULTS:"
 
     tests = [
-      { pattern: /\[1\]/, description: 'Single citation :cite[cc] → [1]' },
-      { pattern: /\[2,3\]/, description: 'Multi-citation :cite[aa,eu] → [2,3]' },
-      { pattern: /\[4,5\]/, description: 'Multi-citation :cite[qe,rb] → [4,5]' },
-      { pattern: /\[4,6\]/, description: 'Multi-citation :cite[qe,do] → [4,6]' },
-      { pattern: /\[5,7\]/, description: 'Multi-citation :cite[rb,by] → [5,7]' },
-      { pattern: /\[3,2\]/, description: 'Multi-citation :cite[eu,aa] → [3,2]' },
-      { pattern: /\[8,6\]/, description: 'Multi-citation :cite[pl,do] → [8,6]' },
+      { pattern: %r{<sup>\[1\]\(#ref-1\)</sup>}, description: 'Single citation :cite[cc] → [1]' },
+      { pattern: %r{<sup>\[2\]\(#ref-2\),\[3\]\(#ref-3\)</sup>}, description: 'Multi-citation :cite[aa,eu] → [2,3]' },
+      { pattern: %r{<sup>\[4\]\(#ref-4\),\[5\]\(#ref-5\)</sup>}, description: 'Multi-citation :cite[qe,rb] → [4,5]' },
+      { pattern: %r{<sup>\[4\]\(#ref-4\),\[6\]\(#ref-6\)</sup>}, description: 'Multi-citation :cite[qe,do] → [4,6]' },
+      { pattern: %r{<sup>\[5\]\(#ref-5\),\[7\]\(#ref-7\)</sup>}, description: 'Multi-citation :cite[rb,by] → [5,7]' },
+      { pattern: %r{<sup>\[3\]\(#ref-3\),\[2\]\(#ref-2\)</sup>}, description: 'Multi-citation :cite[eu,aa] → [3,2]' },
+      { pattern: %r{<sup>\[8\]\(#ref-8\),\[6\]\(#ref-6\)</sup>}, description: 'Multi-citation :cite[pl,do] → [8,6]' },
       { pattern: /\*\*References:\*\*/, description: 'References section included' },
       { pattern: %r{1\. \[rubocop/ruby-style-guide\]}, description: 'Reference 1 formatted correctly' },
       { pattern: /2\. \[Strategy in Ruby/, description: 'Reference 2 formatted correctly' },
