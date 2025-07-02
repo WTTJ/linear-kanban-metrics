@@ -15,19 +15,20 @@ AllCops:
   NewCops: enable
   SuggestExtensions: false
   Exclude:
+    - '**/*.json'
+    - '**/*.md'
+    - '**/*.txt'
+    - '**/*.yaml'
+    - '**/*.yml'
+    - 'kanban_metrics_original.rb'
+    - 'kanban_metrics.backup.rb'
+    - 'spec/scripts/**/*'
+    - 'spec/vcr_cassettes/**/*'
     - 'tmp/**/*'
     - 'vendor/**/*'
-    - 'spec/vcr_cassettes/**/*'
-    - 'kanban_metrics.backup.rb'
-    - 'kanban_metrics_original.rb'
-    - '**/*.yml'
-    - '**/*.yaml'
-    - '**/*.md'
-    - '**/*.json'
-    - '**/*.txt'
   Include:
-    - '**/*.rb'
     - '.circleci/scripts/ci-*'
+    - '**/*.rb'
 
 # Gem structure specific settings
 Gemspec/RequiredRubyVersion:

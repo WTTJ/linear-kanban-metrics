@@ -348,58 +348,88 @@ end
 # Module for processing Dust citations
 module DustCitationProcessor
   def format_response_with_citations(content, citations)
-    # Create a citation map for lookup
-    citation_map = build_citation_map(citations)
+    # Strategy: Since citation markers in content often don't match citation IDs from API,
+    # we'll use a more robust approach:
+    # 1. Extract all citation markers from content
+    # 2. Create a sequential mapping to available citations
+    # 3. Replace markers with sequential references
 
-    # Replace inline citation markers with numbered references
-    formatted_content = replace_citation_markers(content, citation_map)
-
-    # Add reference list at the end if we have citations
     if citations.any?
-      formatted_content << "\n\n---\n\n**References:**\n\n"
-      citations.each_with_index do |citation, index|
-        ref_number = index + 1
-        formatted_content << "<a id=\"ref-#{ref_number}\"></a>#{ref_number}. #{format_citation(citation)}\n\n"
-      end
+      formatted_content = replace_citation_markers_smart(content, citations)
+      formatted_content = add_reference_list(formatted_content, citations)
+    else
+      # No citations available, mark all citation markers as unresolved
+      formatted_content = mark_unresolved_citations(content)
     end
 
     formatted_content
   end
 
-  def build_citation_map(citations)
-    # Build a map from citation IDs to citation indices (1-based)
-    citation_map = {}
-    citations.each_with_index do |citation, index|
-      # Dust citations usually have an 'id' field
-      citation_map[citation['id']] = index + 1 if citation.is_a?(Hash) && citation['id']
-    end
-    citation_map
+  def replace_citation_markers_smart(content, citations)
+    citation_ids = extract_citation_ids_from_content(content)
+    return content if citation_ids.empty?
+
+    id_to_reference = build_id_to_reference_mapping(citation_ids, citations)
+    @logger.debug "Citation ID to reference mapping: #{id_to_reference.inspect}"
+
+    replace_markers_with_references(content, id_to_reference)
   end
 
-  def replace_citation_markers(content, citation_map)
-    # Replace :cite[id] or :cite[id1,id2,...] markers with numbered references
+  def extract_citation_ids_from_content(content)
+    citation_ids = []
+    content.scan(/:cite\[([^\]]+)\]/) do |match|
+      ids = match.first.split(',').map(&:strip)
+      citation_ids.concat(ids)
+    end
+    citation_ids.uniq
+  end
+
+  def build_id_to_reference_mapping(citation_ids, citations)
+    id_to_reference = {}
+    citation_ids.each_with_index do |citation_id, index|
+      id_to_reference[citation_id] = index + 1 if index < citations.length
+    end
+    id_to_reference
+  end
+
+  def replace_markers_with_references(content, id_to_reference)
     content.gsub(/:cite\[([^\]]+)\]/) do |match|
       cite_ids_string = Regexp.last_match(1)
       cite_ids = cite_ids_string.split(',').map(&:strip)
 
-      # Process each citation ID and collect valid references
-      references = cite_ids.filter_map do |cite_id|
-        citation_map[cite_id] if citation_map[cite_id]
-      end
+      references = cite_ids.filter_map { |cite_id| id_to_reference[cite_id] }
 
-      if references.any?
-        # Format as markdown superscript-style reference links
-        if references.length == 1
-          "<sup>[#{references.first}](#ref-#{references.first})</sup>"
-        else
-          ref_links = references.map { |ref| "[#{ref}](#ref-#{ref})" }
-          "<sup>#{ref_links.join(',')}</sup>"
-        end
-      else
-        # If no citation IDs found, keep the original marker but make it more visible
-        "**#{match}**"
-      end
+      format_citation_references(references, match)
     end
+  end
+
+  def format_citation_references(references, original_match)
+    if references.any?
+      if references.length == 1
+        "<sup>[#{references.first}](#ref-#{references.first})</sup>"
+      else
+        ref_links = references.map { |ref| "[#{ref}](#ref-#{ref})" }
+        "<sup>#{ref_links.join(',')}</sup>"
+      end
+    else
+      "**#{original_match}**"
+    end
+  end
+
+  def mark_unresolved_citations(content)
+    # When no citations are available, mark all citation markers as unresolved
+    content.gsub(/:cite\[([^\]]+)\]/, '**\0**')
+  end
+
+  def add_reference_list(content, citations)
+    return content if citations.empty?
+
+    references = citations.map.with_index do |citation, index|
+      ref_number = index + 1
+      "<a id=\"ref-#{ref_number}\"></a>#{ref_number}. #{format_citation(citation)}\n\n"
+    end.join
+
+    "#{content}\n\n---\n\n**References:**\n\n#{references}"
   end
 
   def format_citation(citation)
@@ -599,8 +629,15 @@ class DustProvider < AIProvider
 
     while retries < max_retries
       response = attempt_fetch_response(conversation_id, retries, max_retries)
-      return response if response_is_valid?(response)
 
+      @logger.debug "Response validation - length: #{response.length}, starts with: '#{response[0..50]}...'"
+
+      if response_is_valid?(response)
+        @logger.debug 'Response validated successfully, returning content'
+        return response
+      end
+
+      @logger.debug "Response not valid, will retry. Response: '#{response[0..100]}...'"
       handle_retry_delay(retries, max_retries)
       retries += 1
     end
@@ -621,13 +658,34 @@ class DustProvider < AIProvider
   end
 
   def response_is_valid?(response)
-    # Check if response is an error message
-    return false if response.include?('Dust agent did not respond')
-    return false if response.include?('empty response')
-    return false if response.include?('did not return a conversation')
-    return false if response == 'retry_needed'
+    # Handle nil responses first
+    return false if response.nil?
 
-    # If we get here, it's a valid response (actual review content)
+    # Check if response is specifically an error message (exact matches)
+    return false if response == 'retry_needed'
+    return false if response.start_with?('Dust agent did not respond.')
+    return false if response.start_with?('Dust agent returned an empty response.')
+    return false if response.start_with?('Dust did not return a conversation.')
+    return false if response.start_with?('Failed to create Dust conversation.')
+
+    # Check for empty or whitespace-only responses
+    return false if response.strip.empty?
+
+    # Check for very short responses that are likely errors (but allow legitimate short reviews)
+    # Valid short responses often contain meaningful content like "LGTM", "Approved", emojis, etc.
+    stripped_response = response.strip
+    return false if stripped_response.empty?
+
+    # Check for single-word error responses
+    words = stripped_response.split(/\s+/)
+    if words.length == 1 && stripped_response.length < 10
+      # Single short word is likely an error unless it's a common review term
+      common_review_terms = ['lgtm', 'approved', 'approve', 'good', 'ok', 'yes', '✅', '👍', '👌', '🎉']
+      return common_review_terms.any? { |term| stripped_response.downcase.include?(term) || stripped_response.include?(term) }
+    end
+
+    # If we get here, it's likely a valid response (actual review content)
+    @logger.debug "Response validated as valid: length=#{response.length}, content='#{response[0..50]}...'"
     true
   end
 
