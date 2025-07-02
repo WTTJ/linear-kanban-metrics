@@ -354,76 +354,29 @@ module DustMessageExtractor
   end
 end
 
-# Module for processing Dust citations
+# Enhanced module for processing Dust citations
 module DustCitationProcessor
+  # Fixed regex pattern for citation markers
   CITATION_MARKER_REGEX = /:cite\[([^\]]+)\]/
 
   def format_response_with_citations(content, citations)
-    return process_content_with_citations(content, citations) if citations.any?
+    logger.debug "Processing citations - Content length: #{content.length}, Citations: #{citations.length}"
 
-    mark_unresolved_citations(content)
-  end
+    return mark_unresolved_citations(content) if citations.empty?
 
-  def replace_citation_markers_smart(content, citations)
-    citation_ids = extract_citation_ids_from_content(content)
-    return content if citation_ids.empty?
+    # Create a more robust citation mapping
+    citation_map = create_enhanced_citation_mapping(content, citations)
 
-    id_to_reference = build_citation_mapping(citation_ids, citations)
-    log_citation_mapping(id_to_reference)
+    if citation_map.empty?
+      logger.warn 'No valid citation mappings found'
+      return mark_unresolved_citations(content)
+    end
 
-    replace_markers_with_references(content, id_to_reference)
+    formatted_content = replace_citation_markers_enhanced(content, citation_map)
+    add_reference_list_enhanced(formatted_content, citation_map)
   end
 
   def extract_citation_ids_from_content(content)
-    extract_unique_citation_ids(content)
-  end
-
-  def build_id_to_reference_mapping(citation_ids, citations)
-    build_citation_mapping(citation_ids, citations)
-  end
-
-  def replace_markers_with_references(content, id_to_reference)
-    content.gsub(CITATION_MARKER_REGEX) do |match|
-      process_citation_marker(match, id_to_reference)
-    end
-  end
-
-  def format_citation_references(references, original_match)
-    return "**#{original_match}**" if references.empty?
-
-    create_citation_links(references)
-  end
-
-  def mark_unresolved_citations(content)
-    content.gsub(CITATION_MARKER_REGEX, '**\0**')
-  end
-
-  def add_reference_list(content, citations)
-    return content if citations.empty?
-
-    references_section = build_references_section(citations)
-    "#{content}\n\n---\n\n**References:**\n\n#{references_section}"
-  end
-
-  def format_citation(citation)
-    case citation
-    when Hash
-      format_hash_citation(citation)
-    when String
-      citation
-    else
-      citation.to_s
-    end
-  end
-
-  private
-
-  def process_content_with_citations(content, citations)
-    formatted_content = replace_citation_markers_smart(content, citations)
-    add_reference_list(formatted_content, citations)
-  end
-
-  def extract_unique_citation_ids(content)
     citation_ids = []
     content.scan(CITATION_MARKER_REGEX) do |match|
       ids = parse_citation_ids(match.first)
@@ -432,55 +385,149 @@ module DustCitationProcessor
     citation_ids.uniq
   end
 
-  def parse_citation_ids(ids_string)
-    ids_string.split(',').map(&:strip)
+  def mark_unresolved_citations(content)
+    content.gsub(CITATION_MARKER_REGEX, '**\0**')
   end
 
-  def build_citation_mapping(citation_ids, citations)
+  def extract_citations_from_dust_response(api_response)
+    citations = []
+
+    # Extract from actions/output/resource format (like in the JSON example)
+    actions = api_response.dig('conversation', 'content')&.flatten&.find { |msg| msg['type'] == 'agent_message' }&.dig('actions') || []
+
+    actions.each do |action|
+      next unless action['output']
+
+      action['output'].each do |output_item|
+        next unless output_item['type'] == 'resource' && output_item['resource']
+
+        resource = output_item['resource']
+        citations << {
+          'reference' => resource['reference'],
+          'title' => resource['title'],
+          'uri' => resource['uri'],
+          'text' => resource['text'],
+          'mimeType' => resource['mimeType']
+        }
+      end
+    end
+
+    # Also check for direct citations in message
+    message_citations = api_response.dig('conversation', 'content')&.flatten&.find do |msg|
+      msg['type'] == 'agent_message'
+    end&.dig('citations') || []
+    citations.concat(message_citations)
+
+    logger.debug "Extracted #{citations.length} citations from Dust response"
+    citations
+  end
+
+  private
+
+  def create_enhanced_citation_mapping(content, citations)
+    citation_ids = extract_citation_ids_from_content(content)
     mapping = {}
     ref_counter = 1
 
     citation_ids.each do |citation_id|
-      # Try different possible fields for the citation ID
-      matching_citation = citations.find do |c|
-        c['reference'] == citation_id || # Direct reference field
-          c['id'] == citation_id ||            # ID field
-          c['reference_id'] == citation_id ||  # Reference ID field
-          c['cite_id'] == citation_id ||       # Cite ID field
-          (c['reference'].is_a?(Hash) && c['reference']['id'] == citation_id) # Nested ID in reference
-      end
+      matching_citation = find_best_matching_citation(citation_id, citations)
 
       if matching_citation
-        mapping[citation_id] = ref_counter
+        mapping[citation_id] = {
+          ref_number: ref_counter,
+          citation: matching_citation
+        }
         ref_counter += 1
+        logger.debug "Mapped citation ID '#{citation_id}' to reference #{ref_counter - 1}"
+      else
+        logger.warn "No matching citation found for ID: '#{citation_id}'"
       end
     end
 
-    logger.debug "Citation mapping attempt - IDs: #{citation_ids}, found matches: #{mapping.keys}"
     mapping
   end
 
-  def log_citation_mapping(mapping)
-    logger.debug "Citation ID to reference mapping: #{mapping.inspect}"
+  def find_best_matching_citation(citation_id, citations)
+    # Try exact matches first
+    exact_match = citations.find { |c| c['reference'] == citation_id }
+    return exact_match if exact_match
+
+    # Try other fields
+    field_match = citations.find do |c|
+      %w[id reference_id cite_id sId].any? { |field| c[field] == citation_id }
+    end
+    return field_match if field_match
+
+    # Try nested reference structures
+    citations.find do |c|
+      c.dig('reference', 'id') == citation_id ||
+        c.dig('reference', 'reference') == citation_id ||
+        c.dig('resource', 'reference') == citation_id
+    end
   end
 
-  def process_citation_marker(match, id_to_reference)
-    cite_ids = extract_cite_ids_from_match(match)
-    references = map_ids_to_references(cite_ids, id_to_reference)
-    format_citation_references(references, match)
+  def parse_citation_ids(ids_string)
+    ids_string.split(',').map(&:strip)
   end
 
-  def extract_cite_ids_from_match(match)
-    cite_ids_string = match.match(CITATION_MARKER_REGEX)[1]
-    parse_citation_ids(cite_ids_string)
+  def replace_citation_markers_enhanced(content, citation_map)
+    content.gsub(CITATION_MARKER_REGEX) do |match|
+      cite_ids_string = match.match(CITATION_MARKER_REGEX)[1]
+      cite_ids = cite_ids_string.split(',').map(&:strip)
+
+      references = cite_ids.filter_map { |id| citation_map[id]&.dig(:ref_number) }
+
+      if references.any?
+        create_citation_links(references)
+      else
+        logger.warn "No references found for citation marker: #{match}"
+        "**#{match}**"
+      end
+    end
   end
 
-  def map_ids_to_references(cite_ids, id_to_reference)
-    cite_ids.filter_map { |cite_id| id_to_reference[cite_id] }
+  def add_reference_list_enhanced(content, citation_map)
+    return content if citation_map.empty?
+
+    references_section = citation_map.values
+                                     .sort_by { |entry| entry[:ref_number] }
+                                     .map { |entry| format_reference_entry(entry) }
+                                     .join
+
+    "#{content}\n\n---\n\n**References:**\n\n#{references_section}"
+  end
+
+  def format_reference_entry(entry)
+    ref_number = entry[:ref_number]
+    citation = entry[:citation]
+
+    formatted_citation = format_citation_enhanced(citation)
+    "<a id=\"ref-#{ref_number}\"></a>#{ref_number}. #{formatted_citation}\n\n"
+  end
+
+  def format_citation_enhanced(citation)
+    case citation
+    when Hash
+      title = citation['title'] || citation['name'] || 'Untitled'
+      uri = citation['uri'] || citation['url'] || citation['href']
+      text = citation['text'] || citation['snippet']
+
+      if uri && !uri.empty?
+        result = "[#{title}](#{uri})"
+        result += " - \"#{text[0..100]}...\"" if text && text.length > 10
+        result
+      else
+        title
+      end
+    when String
+      citation
+    else
+      citation.to_s
+    end
   end
 end
 
-# Module for citation formatting and reference building
+# Enhanced module for citation formatting and reference building
 module DustCitationFormatter
   def create_citation_links(references)
     return create_single_citation_link(references.first) if references.length == 1
@@ -497,84 +544,19 @@ module DustCitationFormatter
     "<sup>#{ref_links.join(',')}</sup>"
   end
 
-  def build_references_section(citations)
-    citations.map.with_index do |citation, index|
-      ref_number = index + 1
-      create_reference_entry(ref_number, citation)
-    end.join
-  end
-
-  def create_reference_entry(ref_number, citation)
-    "<a id=\"ref-#{ref_number}\"></a>#{ref_number}. #{format_citation(citation)}\n\n"
-  end
-
-  def format_hash_citation(citation)
-    # Handle Dust's various citation formats
-    if citation['reference']
-      format_reference_citation(citation)
-    elsif citation['document']
-      format_document_citation(citation)
-    elsif citation['title'] || citation['url']
-      format_basic_citation(citation)
-    else
-      citation.to_s
-    end
-  end
-
-  def format_reference_citation(citation)
-    ref = citation['reference']
-    title = ref['title'] || 'Untitled'
-    url = ref['href']
-
-    if url
-      "[#{title}](#{url})"
-    else
-      title
-    end
-  end
-
-  def format_document_citation(citation)
-    doc = citation['document']
-    title = doc['title'] || doc['name'] || 'Document'
-    url = doc['url'] || doc['href']
-
-    if url
-      "[#{title}](#{url})"
-    else
-      title
-    end
-  end
-
-  def format_basic_citation(citation)
-    title = citation['title'] || citation['name'] || 'Reference'
-    url = citation['url'] || citation['href']
-    snippet = citation['snippet'] || citation['text']
-
-    parts = []
-    parts << if url
-               "[#{title}](#{url})"
-             else
-               title
-             end
-
-    if snippet && snippet.length > 10
-      # Add a snippet preview if available
-      clean_snippet = snippet.strip.gsub(/\s+/, ' ')[0..100]
-      parts << "\"#{clean_snippet}#{'...' if snippet.length > 100}\""
-    end
-
-    parts.join(' - ')
+  def format_citation(citation)
+    format_citation_enhanced(citation)
   end
 end
 
-# Module for processing Dust API responses
+# Enhanced module for processing Dust API responses
 module DustResponseProcessor
   include DustMessageExtractor
   include DustCitationProcessor
   include DustCitationFormatter
 
   def extract_content(api_response)
-    logger.debug "Full Dust API response: #{api_response.inspect}"
+    logger.debug 'Processing Dust API response for citations'
 
     messages = extract_messages_from_response(api_response)
     return messages if messages.is_a?(String) # Error message
@@ -582,19 +564,21 @@ module DustResponseProcessor
     agent_messages = find_agent_messages(messages)
     return agent_messages if agent_messages.is_a?(String) # Error message
 
-    extract_final_content_with_citations(agent_messages)
+    # Extract citations from the full API response, not just the message
+    citations = extract_citations_from_dust_response(api_response)
+
+    extract_final_content_with_citations(agent_messages, citations)
   end
 
-  def extract_final_content_with_citations(agent_messages)
+  def extract_final_content_with_citations(agent_messages, citations)
     latest_message = extract_latest_message(agent_messages)
     content = extract_message_content(latest_message)
-    citations = extract_message_citations(latest_message)
 
     log_extraction_details(content, citations)
 
     return empty_content_error_message if content_empty?(content)
 
-    logger.info 'Successfully received review from Dust AI'
+    logger.info "Successfully received review from Dust AI with #{citations.length} citations"
     format_response_with_citations(content, citations)
   end
 
@@ -606,10 +590,6 @@ module DustResponseProcessor
 
   def extract_message_content(message)
     message&.dig('content')
-  end
-
-  def extract_message_citations(message)
-    message&.dig('citations') || []
   end
 
   def log_extraction_details(content, citations)
