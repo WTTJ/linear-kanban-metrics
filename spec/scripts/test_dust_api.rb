@@ -298,11 +298,20 @@ def display_configuration
   puts '✅ Configuration loaded:'
   puts "   Workspace ID: #{ENV.fetch('DUST_WORKSPACE_ID', nil)}"
   puts "   Agent ID: #{ENV.fetch('DUST_AGENT_ID', nil)}"
-  puts "   API Key: #{ENV['DUST_API_KEY'][0..8]}..." if ENV['DUST_API_KEY']
+  puts "   API Key: #{mask_api_key(ENV['DUST_API_KEY'])}"
 
   debug_mode = ENV['DEBUG'] == 'true'
   puts "   Debug Mode: #{debug_mode ? 'ON' : 'OFF'}"
   puts
+end
+
+def mask_api_key(api_key)
+  return 'Not set' if api_key.nil? || api_key.empty?
+  
+  # Only show last 4 characters for identification, mask the rest
+  return '****' if api_key.length <= 4
+  
+  "****#{api_key[-4..]}"
 end
 
 def create_client
