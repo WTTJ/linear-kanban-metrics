@@ -352,12 +352,18 @@ class DustProvider < AIProvider
     body = {
       message: {
         content: prompt,
+        context: {
+          timezone: 'UTC',
+          username: 'github-pr-reviewer',
+          fullName: 'GitHub PR Reviewer'
+        },
         mentions: [{ configurationId: @config.dust_agent_id }]
       },
-      blocking: true
+      blocking: true,
+      streamGenerationEvents: false
     }.to_json
 
-    @logger.debug 'Creating Dust conversation...'
+    @logger.debug "Creating Dust conversation with body: #{body}"
     @http_client.post(uri, headers, body)
   end
 
