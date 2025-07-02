@@ -537,12 +537,8 @@ module DustResponseProcessor
 
     @logger.info 'Successfully received review from Dust AI'
 
-    # Return content with citations metadata if available
-    if citations.any?
-      format_response_with_citations(content, citations)
-    else
-      content
-    end
+    # Always process citations - either format with metadata or mark as unresolved
+    format_response_with_citations(content, citations)
   end
 end
 
