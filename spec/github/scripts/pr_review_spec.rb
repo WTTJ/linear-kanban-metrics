@@ -1,437 +1,381 @@
 # frozen_string_literal: true
 
-require 'spec_helper'
 require_relative '../../../.github/scripts/pr_review'
 
-RSpec.describe PullRequestReviewer do
-  # === TEST DATA SETUP ===
-  # === NAMED SUBJECTS ===
-  subject(:reviewer) { described_class.new }
-
-  let(:github_client) { instance_double(Octokit::Client) }
-  let(:valid_github_token) { 'test-token' }
-  let(:valid_repo) { 'test-user/test-repo' }
-  let(:valid_pr_number) { '123' }
-  let(:valid_anthropic_key) { 'test-key' }
-
-  let(:test_guidelines) { 'Test coding standards' }
-  let(:test_rspec_results) { 'All tests pass' }
-  let(:test_rubocop_results) { 'No offenses' }
-  let(:test_brakeman_results) { 'No warnings' }
-  let(:test_pr_diff) { 'Test PR diff' }
-  let(:test_prompt_template) { 'Test template {{guidelines}}' }
-
-  before do
-    # Arrange - Set up valid test environment
-    setup_valid_environment
-    setup_github_client_mock
-  end
-
-  def setup_valid_environment
-    allow(ENV).to receive(:fetch).with('GITHUB_TOKEN', nil).and_return(valid_github_token)
-    allow(ENV).to receive(:fetch).with('GITHUB_REPOSITORY', nil).and_return(valid_repo)
-    allow(ENV).to receive(:fetch).with('PR_NUMBER', '0').and_return(valid_pr_number)
-    allow(ENV).to receive(:fetch).with('ANTHROPIC_API_KEY', nil).and_return(valid_anthropic_key)
-    allow(ENV).to receive(:[]).with('DEBUG').and_return(nil)
-  end
-
-  def setup_github_client_mock
-    connection_options = double('connection_options')
-    allow(connection_options).to receive(:[]=).with(:request, anything)
-
-    allow(Octokit::Client).to receive(:new).and_return(github_client)
-    allow(github_client).to receive(:connection_options).and_return(connection_options)
-  end
-
-  describe '#initialize' do
-    context 'with valid configuration' do
-      it 'creates a reviewer instance successfully' do
-        # Act & Assert
-        expect(reviewer).to be_an_instance_of(described_class)
-      end
-    end
-
-    context 'with missing GITHUB_TOKEN' do
-      before do
-        # Arrange - Remove GITHUB_TOKEN
-        allow(ENV).to receive(:fetch).with('GITHUB_TOKEN', nil).and_return(nil)
-      end
-
-      it 'raises descriptive error message' do
-        # Act & Assert
-        expect { described_class.new }.to raise_error(ArgumentError, /GITHUB_TOKEN environment variable is required/)
-      end
-    end
-
-    context 'with invalid PR number' do
-      before do
-        # Arrange - Set invalid PR number
-        allow(ENV).to receive(:fetch).with('PR_NUMBER', '0').and_return('0')
-      end
-
-      it 'raises ArgumentError with validation message' do
-        # Act & Assert
-        expect { described_class.new }.to raise_error(ArgumentError, /Invalid configuration.*PR_NUMBER must be a positive integer/)
-      end
-    end
-  end
-
-  describe '#gather_review_data' do
-    subject(:review_data) { reviewer.send(:gather_review_data) }
+RSpec.describe 'PR Review Refactored' do
+  describe BasicConfigValidator do
+    let(:validator) { described_class.new }
+    let(:config) { double('config') }
 
     before do
-      # Arrange - Setup file system mocks
-      setup_file_mocks
-      setup_github_api_mock
+      allow(config).to receive_messages(repo: 'test/repo', pr_number: 123, github_token: 'token', api_provider: 'anthropic')
     end
 
-    def setup_file_mocks
-      allow(File).to receive(:exist?).and_return(true)
-      setup_coding_standards_mock
-      setup_report_file_mocks
-      setup_prompt_template_mock
+    it 'returns no errors for valid config' do
+      errors = validator.validate(config)
+      expect(errors).to be_empty
     end
 
-    def setup_coding_standards_mock
-      allow(File).to receive(:read).with('doc/CODING_STANDARDS.md').and_return(test_guidelines)
+    it 'returns error for missing repo' do
+      allow(config).to receive(:repo).and_return(nil)
+      errors = validator.validate(config)
+      expect(errors).to include('GITHUB_REPOSITORY environment variable is required')
     end
 
-    def setup_report_file_mocks
-      allow(File).to receive(:read).with('reports/rspec.txt').and_return(test_rspec_results)
-      allow(File).to receive(:read).with('reports/rubocop.txt').and_return(test_rubocop_results)
-      allow(File).to receive(:read).with('reports/brakeman.txt').and_return(test_brakeman_results)
+    it 'returns error for invalid PR number' do
+      allow(config).to receive(:pr_number).and_return(0)
+      errors = validator.validate(config)
+      expect(errors).to include('PR_NUMBER must be a positive integer')
     end
+  end
 
-    def setup_prompt_template_mock
-      allow(File).to receive(:read)
-        .with('.github/scripts/pr_review_prompt_template.md')
-        .and_return(test_prompt_template)
-    end
+  describe AnthropicConfigValidator do
+    let(:validator) { described_class.new }
+    let(:config) { double('config') }
 
-    def setup_github_api_mock
-      allow(github_client).to receive(:pull_request).and_return(test_pr_diff)
-    end
-
-    context 'with all files available' do
-      it 'returns complete review data structure', :aggregate_failures do
-        # Act & Assert
-        expect(review_data).to include(
-          guidelines: test_guidelines,
-          rspec_results: test_rspec_results,
-          rubocop_results: test_rubocop_results,
-          brakeman_results: test_brakeman_results,
-          pr_diff: test_pr_diff,
-          prompt_template: test_prompt_template
-        )
-      end
-    end
-
-    context 'with missing files' do
+    context 'when using anthropic provider' do
       before do
-        # Arrange - Simulate missing files
-        allow(File).to receive(:exist?).and_return(false)
+        allow(config).to receive_messages(anthropic?: true, anthropic_api_key: 'key')
       end
 
-      it 'provides fallback content for missing files', :aggregate_failures do
-        # Act & Assert
-        expect(review_data[:guidelines]).to eq('Not available.')
-        expect(review_data[:rspec_results]).to eq('Not available.')
+      it 'returns no errors for valid config' do
+        errors = validator.validate(config)
+        expect(errors).to be_empty
+      end
+
+      it 'returns error for missing API key' do
+        allow(config).to receive(:anthropic_api_key).and_return(nil)
+        errors = validator.validate(config)
+        expect(errors).to include('ANTHROPIC_API_KEY environment variable is required for Anthropic API')
       end
     end
 
-    context 'with GitHub API failure' do
+    context 'when not using anthropic provider' do
       before do
-        # Arrange - Simulate API failure
-        allow(github_client).to receive(:pull_request).and_raise(StandardError, 'API Error')
+        allow(config).to receive(:anthropic?).and_return(false)
       end
 
-      it 'handles API errors gracefully' do
-        # Act & Assert
-        expect(review_data[:pr_diff]).to eq('PR diff not available.')
+      it 'returns no errors' do
+        errors = validator.validate(config)
+        expect(errors).to be_empty
       end
     end
   end
 
-  describe '#build_claude_prompt' do
-    subject(:prompt) { reviewer.send(:build_claude_prompt, review_data) }
+  describe DustConfigValidator do
+    let(:validator) { described_class.new }
+    let(:config) { double('config') }
 
+    context 'when using dust provider' do
+      before do
+        allow(config).to receive_messages(dust?: true, dust_api_key: 'key', dust_workspace_id: 'workspace', dust_agent_id: 'agent')
+      end
+
+      it 'returns no errors for valid config' do
+        errors = validator.validate(config)
+        expect(errors).to be_empty
+      end
+
+      it 'returns error for missing API key' do
+        allow(config).to receive(:dust_api_key).and_return(nil)
+        errors = validator.validate(config)
+        expect(errors).to include('DUST_API_KEY environment variable is required for Dust API')
+      end
+    end
+
+    context 'when not using dust provider' do
+      before do
+        allow(config).to receive(:dust?).and_return(false)
+      end
+
+      it 'returns no errors' do
+        errors = validator.validate(config)
+        expect(errors).to be_empty
+      end
+    end
+  end
+
+  describe ConfigValidationService do
+    let(:service) { described_class.new }
+    let(:config) { double('config') }
+
+    before do
+      allow(config).to receive_messages(repo: 'test/repo', pr_number: 123, github_token: 'token', api_provider: 'anthropic', anthropic?: true, dust?: false, anthropic_api_key: 'key')
+    end
+
+    it 'validates configuration using all validators' do
+      errors = service.validate(config)
+      expect(errors).to be_empty
+    end
+  end
+
+  describe ReviewerConfig do
+    let(:env) do
+      {
+        'GITHUB_REPOSITORY' => 'test/repo',
+        'PR_NUMBER' => '123',
+        'GITHUB_TOKEN' => 'token',
+        'API_PROVIDER' => 'anthropic',
+        'ANTHROPIC_API_KEY' => 'key'
+      }
+    end
+    let(:validation_service) { double('validation_service') }
+    let(:config) { described_class.new(env, validation_service) }
+
+    before do
+      allow(validation_service).to receive(:validate).and_return([])
+    end
+
+    it 'extracts configuration from environment' do
+      expect(config.repo).to eq('test/repo')
+      expect(config.pr_number).to eq(123)
+      expect(config.github_token).to eq('token')
+      expect(config.api_provider).to eq('anthropic')
+      expect(config.anthropic_api_key).to eq('key')
+    end
+
+    it 'is valid when no errors' do
+      expect(config.valid?).to be true
+    end
+
+    it 'is invalid when has errors' do
+      allow(validation_service).to receive(:validate).and_return(['error'])
+      expect(config.valid?).to be false
+    end
+
+    it 'returns true for anthropic provider' do
+      expect(config.anthropic?).to be true
+    end
+
+    it 'returns false for dust provider' do
+      expect(config.dust?).to be false
+    end
+  end
+
+  describe SecureFileReader do
+    let(:logger) { double('logger') }
+    let(:reader) { described_class.new(logger) }
+
+    before do
+      allow(logger).to receive(:warn)
+    end
+
+    it 'raises error for invalid file path' do
+      expect { reader.read_file('../invalid') }.to raise_error(ArgumentError)
+    end
+
+    it 'raises error for file path with null bytes' do
+      expect { reader.read_file("doc/test\0") }.to raise_error(ArgumentError)
+    end
+
+    it 'returns fallback for missing file' do
+      allow(File).to receive(:exist?).with('doc/missing.md').and_return(false)
+      result = reader.read_file('doc/missing.md', 'fallback')
+      expect(result).to eq('fallback')
+    end
+
+    it 'reads existing file' do
+      allow(File).to receive(:exist?).with('doc/test.md').and_return(true)
+      allow(File).to receive(:read).with('doc/test.md').and_return('content')
+      result = reader.read_file('doc/test.md')
+      expect(result).to eq('content')
+    end
+  end
+
+  describe PromptBuilder do
+    let(:builder) { described_class.new }
     let(:review_data) do
       {
-        prompt_template: 'Guidelines: {{guidelines}}\nRSpec: {{rspec_results}}',
-        guidelines: 'Test guidelines',
-        rspec_results: 'Test results',
-        rubocop_results: 'Clean',
-        brakeman_results: 'Secure',
-        pr_diff: 'Test diff'
+        prompt_template: 'Guidelines: {{guidelines}}, RSpec: {{rspec_results}}, RuboCop: {{rubocop_results}}, Brakeman: {{brakeman_results}}, Diff: {{pr_diff}}',
+        guidelines: 'Follow standards',
+        rspec_results: 'Tests passed',
+        rubocop_results: 'No offenses',
+        brakeman_results: 'No issues',
+        pr_diff: 'diff content'
       }
     end
 
-    it 'replaces all template placeholders', :aggregate_failures do
-      # Act & Assert
-      expect(prompt).to include('Guidelines: Test guidelines')
-      expect(prompt).to include('RSpec: Test results')
-      expect(prompt).not_to include('{{')
+    it 'builds prompt by replacing placeholders' do
+      prompt = builder.build_prompt(review_data)
+      expect(prompt).to eq('Guidelines: Follow standards, RSpec: Tests passed, RuboCop: No offenses, Brakeman: No issues, Diff: diff content')
     end
   end
 
-  describe '#safe_read_file' do
-    subject(:file_content) do
-      if custom_fallback
-        reviewer.send(:safe_read_file, file_path, custom_fallback)
-      else
-        reviewer.send(:safe_read_file, file_path)
-      end
-    end
-
-    let(:file_path) { 'doc/test_file.txt' }
-    let(:custom_fallback) { nil }
-
-    context 'when file exists and is readable' do
-      before do
-        # Arrange - Setup successful file read
-        allow(File).to receive(:exist?).with(file_path).and_return(true)
-        allow(File).to receive(:read).with(file_path).and_return('file content')
-      end
-
-      it 'returns the file content' do
-        # Act & Assert
-        expect(file_content).to eq('file content')
-      end
-    end
-
-    context 'when file does not exist' do
-      before do
-        # Arrange - Simulate missing file
-        allow(File).to receive(:exist?).with(file_path).and_return(false)
-      end
-
-      it 'returns default fallback message' do
-        # Act & Assert
-        expect(file_content).to eq('Not available.')
-      end
-
-      context 'with custom fallback' do
-        let(:custom_fallback) { 'Custom fallback' }
-
-        it 'returns the custom fallback message' do
-          # Act & Assert
-          expect(file_content).to eq('Custom fallback')
-        end
-      end
-    end
-
-    context 'when file read raises an error' do
-      before do
-        # Arrange - Simulate file read error
-        allow(File).to receive(:exist?).with(file_path).and_return(true)
-        allow(File).to receive(:read).with(file_path).and_raise(StandardError, 'Permission denied')
-      end
-
-      it 'handles errors gracefully and returns fallback' do
-        # Act & Assert
-        expect(file_content).to eq('Not available.')
-      end
-    end
-
-    context 'with security validation' do
-      context 'when file path contains directory traversal' do
-        let(:file_path) { '../etc/passwd' }
-
-        it 'raises security error' do
-          # Act & Assert
-          expect { file_content }.to raise_error(ArgumentError, /directory traversal patterns/)
-        end
-      end
-
-      context 'when file path contains null bytes' do
-        let(:file_path) { "doc/test\0file.txt" }
-
-        it 'raises security error' do
-          # Act & Assert
-          expect { file_content }.to raise_error(ArgumentError, /null bytes/)
-        end
-      end
-
-      context 'when file path is outside allowed directories' do
-        let(:file_path) { 'unauthorized/file.txt' }
-
-        it 'raises security error' do
-          # Act & Assert
-          expect { file_content }.to raise_error(ArgumentError, /must start with one of/)
-        end
-      end
-
-      context 'when file path is nil' do
-        let(:file_path) { nil }
-
-        it 'raises security error' do
-          # Act & Assert
-          expect { file_content }.to raise_error(ArgumentError, /cannot be nil or empty/)
-        end
-      end
-
-      context 'when file path is empty' do
-        let(:file_path) { '' }
-
-        it 'raises security error' do
-          # Act & Assert
-          expect { file_content }.to raise_error(ArgumentError, /cannot be nil or empty/)
-        end
-      end
-    end
-  end
-
-  describe '#format_github_comment' do
-    subject(:formatted_comment) { reviewer.send(:format_github_comment, review_content) }
-
-    let(:review_content) { 'This is a test review' }
-    let(:freeze_time) { Time.parse('2025-06-28 10:00:00 UTC') }
+  describe HTTPClient do
+    let(:logger) { double('logger') }
+    let(:client) { described_class.new(logger) }
 
     before do
-      # Arrange - Freeze time for consistent testing
-      allow(Time).to receive(:now).and_return(freeze_time)
+      allow(logger).to receive(:error)
     end
 
-    it 'includes all required comment components', :aggregate_failures do
-      # Act & Assert
-      expect(formatted_comment).to include(review_content)
-      expect(formatted_comment).to include('Review generated by Claude')
-      expect(formatted_comment).to include('---')
-    end
+    it 'raises error for non-200 response' do
+      response = double('response', code: '400', body: 'error')
+      allow(Net::HTTP).to receive(:start).and_return(response)
 
-    it 'includes the correct timestamp' do
-      # Act & Assert
-      expect(formatted_comment).to include('2025-06-28 10:00:00 UTC')
+      expect { client.post(URI('http://test.com'), {}, '{}') }.to raise_error(StandardError)
     end
   end
 
-  describe 'configuration validation' do
-    context 'with complete valid configuration' do
-      it 'passes all validation checks' do
-        # Act & Assert
-        expect { described_class.new }.not_to raise_error
-      end
+  describe AnthropicProvider do
+    let(:config) { double('config', anthropic_api_key: 'key') }
+    let(:http_client) { double('http_client') }
+    let(:logger) { double('logger') }
+    let(:provider) { described_class.new(config, http_client, logger) }
+
+    before do
+      allow(logger).to receive(:info)
+      allow(logger).to receive(:debug)
+      allow(logger).to receive(:warn)
     end
 
-    context 'with missing ANTHROPIC_API_KEY' do
-      before do
-        # Arrange - Remove required API key
-        allow(ENV).to receive(:fetch).with('ANTHROPIC_API_KEY', nil).and_return(nil)
-      end
-
-      it 'raises descriptive validation error' do
-        # Act & Assert
-        expect { described_class.new }.to raise_error(ArgumentError, /ANTHROPIC_API_KEY environment variable is required/)
-      end
+    it 'returns correct provider name' do
+      expect(provider.provider_name).to eq('Anthropic Claude')
     end
 
-    context 'with empty GITHUB_REPOSITORY' do
-      before do
-        # Arrange - Set empty repository name
-        allow(ENV).to receive(:fetch).with('GITHUB_REPOSITORY', nil).and_return('')
-      end
+    it 'requests review from API' do
+      api_response = { 'content' => [{ 'text' => 'review content' }] }
+      allow(http_client).to receive(:post).and_return(api_response)
 
-      it 'raises descriptive validation error' do
-        # Act & Assert
-        expect { described_class.new }.to raise_error(ArgumentError, /GITHUB_REPOSITORY environment variable is required/)
-      end
-    end
-  end
-
-  describe 'API configuration constants' do
-    it 'defines correct API version and model', :aggregate_failures do
-      # Act & Assert
-      expect(described_class::API_VERSION).to eq('2023-06-01')
-      expect(described_class::CLAUDE_MODEL).to eq('claude-opus-4-20250514')
-      expect(described_class::MAX_TOKENS).to eq(4096)
-      expect(described_class::TEMPERATURE).to eq(0.1)
+      result = provider.request_review('test prompt')
+      expect(result).to eq('review content')
     end
 
-    it 'defines timeout configurations', :aggregate_failures do
-      # Act & Assert
-      expect(described_class::HTTP_TIMEOUT).to eq(30)
-      expect(described_class::READ_TIMEOUT).to eq(120)
-      expect(described_class::GITHUB_TIMEOUT).to eq(15)
-    end
-  end
-end
+    it 'handles empty response' do
+      api_response = { 'content' => [{ 'text' => '' }] }
+      allow(http_client).to receive(:post).and_return(api_response)
 
-RSpec.describe ReviewerConfig do
-  subject(:config) { described_class.new }
-
-  before do
-    # Arrange - Setup environment variables
-    allow(ENV).to receive(:fetch).with('GITHUB_REPOSITORY', nil).and_return('test-repo')
-    allow(ENV).to receive(:fetch).with('PR_NUMBER', '0').and_return('123')
-    allow(ENV).to receive(:fetch).with('ANTHROPIC_API_KEY', nil).and_return('test-key')
-    allow(ENV).to receive(:fetch).with('GITHUB_TOKEN', nil).and_return('test-token')
-  end
-
-  describe '#initialize' do
-    it 'extracts configuration from environment variables', :aggregate_failures do
-      # Act & Assert
-      expect(config.repo).to eq('test-repo')
-      expect(config.pr_number).to eq(123)
-      expect(config.anthropic_api_key).to eq('test-key')
-      expect(config.github_token).to eq('test-token')
+      result = provider.request_review('test prompt')
+      expect(result).to include('Anthropic did not return a review')
     end
   end
 
-  describe '#valid?' do
-    context 'with all required values' do
-      it 'returns true' do
-        # Act & Assert
-        expect(config.valid?).to be true
-      end
+  describe DustProvider do
+    let(:config) do
+      double('config',
+             dust_api_key: 'key',
+             dust_workspace_id: 'workspace',
+             dust_agent_id: 'agent')
+    end
+    let(:http_client) { double('http_client') }
+    let(:logger) { double('logger') }
+    let(:provider) { described_class.new(config, http_client, logger) }
+
+    before do
+      allow(logger).to receive(:info)
+      allow(logger).to receive(:debug)
+      allow(logger).to receive(:warn)
     end
 
-    context 'with missing required values' do
-      before do
-        # Arrange - Remove required environment variable
-        allow(ENV).to receive(:fetch).with('GITHUB_REPOSITORY', nil).and_return(nil)
-      end
+    it 'returns correct provider name' do
+      expect(provider.provider_name).to eq('Dust AI')
+    end
 
-      it 'returns false' do
-        # Act & Assert
-        expect(config.valid?).to be false
-      end
+    it 'requests review from API' do
+      conversation_response = { 'conversation' => { 'sId' => 'conv123' } }
+      response_data = {
+        'conversation' => {
+          'content' => [[{ 'type' => 'agent_message', 'content' => 'review content' }]]
+        }
+      }
+
+      allow(http_client).to receive_messages(post: conversation_response, get: response_data)
+
+      result = provider.request_review('test prompt')
+      expect(result).to eq('review content')
     end
   end
 
-  describe '#errors' do
-    context 'with valid configuration' do
-      it 'returns empty array' do
-        # Act & Assert
-        expect(config.errors).to be_empty
-      end
+  describe AIProviderFactory do
+    let(:config) { double('config') }
+    let(:http_client) { double('http_client') }
+    let(:logger) { double('logger') }
+
+    it 'creates Anthropic provider' do
+      allow(config).to receive(:api_provider).and_return('anthropic')
+      provider = described_class.create(config, http_client, logger)
+      expect(provider).to be_a(AnthropicProvider)
     end
 
-    context 'with invalid PR number' do
-      before do
-        # Arrange - Set invalid PR number
-        allow(ENV).to receive(:fetch).with('PR_NUMBER', '0').and_return('0')
-      end
-
-      it 'includes PR number error' do
-        # Act & Assert
-        expect(config.errors).to include('PR_NUMBER must be a positive integer')
-      end
+    it 'creates Dust provider' do
+      allow(config).to receive(:api_provider).and_return('dust')
+      provider = described_class.create(config, http_client, logger)
+      expect(provider).to be_a(DustProvider)
     end
 
-    context 'with missing environment variables' do
-      before do
-        # Arrange - Remove all required variables
-        allow(ENV).to receive(:fetch).with('GITHUB_REPOSITORY', nil).and_return('')
-        allow(ENV).to receive(:fetch).with('ANTHROPIC_API_KEY', nil).and_return(nil)
-        allow(ENV).to receive(:fetch).with('GITHUB_TOKEN', nil).and_return('')
+    it 'raises error for unsupported provider' do
+      allow(config).to receive(:api_provider).and_return('unknown')
+      expect { described_class.create(config, http_client, logger) }.to raise_error(StandardError)
+    end
+  end
+
+  describe GitHubCommentService do
+    let(:github_client) { double('github_client') }
+    let(:logger) { double('logger') }
+    let(:service) { described_class.new(github_client, logger) }
+    let(:config) { double('config', repo: 'test/repo', pr_number: 123) }
+
+    before do
+      allow(logger).to receive(:info)
+      allow(logger).to receive(:error)
+      allow(Time).to receive(:now).and_return(Time.parse('2025-01-01 10:00:00 UTC'))
+    end
+
+    it 'posts comment to GitHub' do
+      expect(github_client).to receive(:add_comment).with('test/repo', 123, anything)
+      service.post_comment(config, 'review content', 'AI Provider')
+    end
+
+    it 'formats comment correctly' do
+      allow(github_client).to receive(:add_comment) do |_repo, _pr, comment|
+        expect(comment).to include('review content')
+        expect(comment).to include('Review generated by AI Provider')
+        expect(comment).to include('2025-01-01 10:00:00 UTC')
       end
 
-      it 'includes all validation errors', :aggregate_failures do
-        # Act & Assert
-        expect(config.errors).to include('GITHUB_REPOSITORY environment variable is required')
-        expect(config.errors).to include('ANTHROPIC_API_KEY environment variable is required')
-        expect(config.errors).to include('GITHUB_TOKEN environment variable is required')
-      end
+      service.post_comment(config, 'review content', 'AI Provider')
+    end
+  end
+
+  describe PullRequestReviewer do
+    let(:config) { double('config') }
+    let(:logger) { double('logger') }
+    let(:github_client) { double('github_client') }
+    let(:dependencies) do
+      {
+        logger: logger,
+        github_client: github_client,
+        http_client: double('http_client'),
+        file_reader: double('file_reader'),
+        data_gatherer: double('data_gatherer'),
+        prompt_builder: double('prompt_builder'),
+        ai_provider: double('ai_provider'),
+        comment_service: double('comment_service')
+      }
+    end
+
+    before do
+      allow(config).to receive_messages(valid?: true, repo: 'test/repo', pr_number: 123, api_provider: 'anthropic')
+      allow(logger).to receive(:info)
+      allow(logger).to receive(:error)
+      allow(logger).to receive(:debug)
+    end
+
+    it 'runs the review process successfully' do
+      reviewer = described_class.new(config, dependencies)
+
+      allow(dependencies[:data_gatherer]).to receive(:gather_data).and_return({})
+      allow(dependencies[:prompt_builder]).to receive(:build_prompt).and_return('prompt')
+      allow(dependencies[:ai_provider]).to receive_messages(request_review: 'review', provider_name: 'AI Provider')
+      expect(dependencies[:comment_service]).to receive(:post_comment)
+
+      reviewer.run
+    end
+
+    it 'raises error for invalid configuration' do
+      allow(config).to receive_messages(valid?: false, errors: ['error'])
+
+      expect { described_class.new(config, dependencies) }.to raise_error(ArgumentError)
     end
   end
 end
