@@ -9,13 +9,17 @@ require 'logger'
 
 # Configuration value object for PR reviewer
 class ReviewerConfig
-  attr_reader :repo, :pr_number, :anthropic_api_key, :github_token
+  attr_reader :repo, :pr_number, :github_token, :api_provider, :anthropic_api_key, :dust_api_key, :dust_workspace_id, :dust_agent_id
 
   def initialize
     @repo = ENV.fetch('GITHUB_REPOSITORY', nil)
     @pr_number = ENV.fetch('PR_NUMBER', '0').to_i
-    @anthropic_api_key = ENV.fetch('ANTHROPIC_API_KEY', nil)
     @github_token = ENV.fetch('GITHUB_TOKEN', nil)
+    @api_provider = ENV.fetch('API_PROVIDER', 'anthropic').downcase
+    @anthropic_api_key = ENV.fetch('ANTHROPIC_API_KEY', nil)
+    @dust_api_key = ENV.fetch('DUST_API_KEY', nil)
+    @dust_workspace_id = ENV.fetch('DUST_WORKSPACE_ID', nil)
+    @dust_agent_id = ENV.fetch('DUST_AGENT_ID', nil)
   end
 
   def valid?
@@ -26,24 +30,48 @@ class ReviewerConfig
     validation_errors = []
     validation_errors << 'GITHUB_REPOSITORY environment variable is required' if repo.nil? || repo.empty?
     validation_errors << 'PR_NUMBER must be a positive integer' if pr_number <= 0
-    validation_errors << 'ANTHROPIC_API_KEY environment variable is required' if anthropic_api_key.nil? || anthropic_api_key.empty?
     validation_errors << 'GITHUB_TOKEN environment variable is required' if github_token.nil? || github_token.empty?
+    validation_errors << 'API_PROVIDER must be either "anthropic" or "dust"' unless %w[anthropic dust].include?(api_provider)
+    
+    case api_provider
+    when 'anthropic'
+      validation_errors << 'ANTHROPIC_API_KEY environment variable is required for Anthropic API' if anthropic_api_key.nil? || anthropic_api_key.empty?
+    when 'dust'
+      validation_errors << 'DUST_API_KEY environment variable is required for Dust API' if dust_api_key.nil? || dust_api_key.empty?
+      validation_errors << 'DUST_WORKSPACE_ID environment variable is required for Dust API' if dust_workspace_id.nil? || dust_workspace_id.empty?
+      validation_errors << 'DUST_AGENT_ID environment variable is required for Dust API' if dust_agent_id.nil? || dust_agent_id.empty?
+    end
+    
     validation_errors
+  end
+
+  def anthropic?
+    api_provider == 'anthropic'
+  end
+
+  def dust?
+    api_provider == 'dust'
   end
 end
 
-# Main class for handling PR reviews with Claude Opus 4
+# Main class for handling PR reviews with multiple AI providers
 # rubocop:disable Metrics/ClassLength
 class PullRequestReviewer
-  API_VERSION = '2023-06-01'
-  CLAUDE_MODEL = 'claude-opus-4-20250514'
-  MAX_TOKENS = 4096 # Increased for better review quality
-  TEMPERATURE = 0.1 # Lower temperature for more consistent code reviews
+  # Anthropic API constants
+  ANTHROPIC_API_VERSION = '2023-06-01'
+  ANTHROPIC_MODEL = 'claude-3-5-sonnet-20241022'
+  
+  # Dust API constants  
+  DUST_API_BASE_URL = 'https://dust.tt'
+  
+  # Common constants
+  MAX_TOKENS = 4096
+  TEMPERATURE = 0.1
 
   # Timeout configurations (in seconds)
-  HTTP_TIMEOUT = 30 # Connection timeout
-  READ_TIMEOUT = 120 # Read timeout for API response
-  GITHUB_TIMEOUT = 15 # GitHub API timeout
+  HTTP_TIMEOUT = 30
+  READ_TIMEOUT = 120
+  GITHUB_TIMEOUT = 15
 
   def initialize
     @logger = setup_logger
@@ -54,10 +82,11 @@ class PullRequestReviewer
 
   def run
     @logger.info "Starting PR review for repository: #{@config.repo}, PR: #{@config.pr_number}"
+    @logger.info "Using API provider: #{@config.api_provider}"
 
     review_data = gather_review_data
-    claude_response = request_claude_review(review_data)
-    post_review_comment(claude_response)
+    ai_response = request_ai_review(review_data)
+    post_review_comment(ai_response)
 
     @logger.info 'PR review completed successfully'
   rescue StandardError => e
@@ -143,7 +172,7 @@ class PullRequestReviewer
     'PR diff not available.'
   end
 
-  def build_claude_prompt(review_data)
+  def build_ai_prompt(review_data)
     template = review_data[:prompt_template]
 
     # Replace template placeholders with actual data
@@ -155,18 +184,36 @@ class PullRequestReviewer
       .gsub('{{pr_diff}}', review_data[:pr_diff])
   end
 
-  def request_claude_review(review_data)
-    @logger.info 'Requesting review from Claude Opus 4...'
+  def request_ai_review(review_data)
+    prompt = build_ai_prompt(review_data)
+    
+    case @config.api_provider
+    when 'anthropic'
+      request_anthropic_review(prompt)
+    when 'dust'
+      request_dust_review(prompt)
+    else
+      raise StandardError, "Unsupported API provider: #{@config.api_provider}"
+    end
+  end
 
-    prompt = build_claude_prompt(review_data)
+  def request_anthropic_review(prompt)
+    @logger.info 'Requesting review from Anthropic Claude...'
+    
     response = call_anthropic_api(prompt)
+    extract_anthropic_content(response)
+  end
 
-    extract_review_content(response)
+  def request_dust_review(prompt)
+    @logger.info 'Requesting review from Dust AI...'
+    
+    response = call_dust_api(prompt)
+    extract_dust_content(response)
   end
 
   def call_anthropic_api(prompt)
     uri = URI('https://api.anthropic.com/v1/messages')
-    request = build_api_request(uri, prompt)
+    request = build_anthropic_request(uri, prompt)
 
     @logger.debug 'Sending request to Anthropic API...'
 
@@ -177,20 +224,20 @@ class PullRequestReviewer
       http.request(request)
     end
 
-    handle_api_response(response)
+    handle_api_response(response, 'Anthropic')
   rescue Net::OpenTimeout, Net::ReadTimeout => e
     @logger.error "Anthropic API request timed out: #{e.message}"
-    raise StandardError, "API request timed out after #{READ_TIMEOUT} seconds"
+    raise StandardError, "Anthropic API request timed out after #{READ_TIMEOUT} seconds"
   end
 
-  def build_api_request(uri, prompt)
+  def build_anthropic_request(uri, prompt)
     request = Net::HTTP::Post.new(uri)
     request['x-api-key'] = @config.anthropic_api_key
-    request['anthropic-version'] = API_VERSION
+    request['anthropic-version'] = ANTHROPIC_API_VERSION
     request['content-type'] = 'application/json'
 
     request.body = {
-      model: CLAUDE_MODEL,
+      model: ANTHROPIC_MODEL,
       max_tokens: MAX_TOKENS,
       temperature: TEMPERATURE,
       messages: [{ role: 'user', content: prompt }]
@@ -199,28 +246,111 @@ class PullRequestReviewer
     request
   end
 
-  def handle_api_response(response)
+  def call_dust_api(prompt)
+    # Step 1: Create a conversation
+    conversation = create_dust_conversation(prompt)
+    conversation_id = conversation.dig('conversation', 'sId')
+    
+    @logger.debug "Created Dust conversation: #{conversation_id}"
+    
+    # Step 2: Wait for and retrieve the agent's response
+    get_dust_response(conversation_id)
+  rescue Net::OpenTimeout, Net::ReadTimeout => e
+    @logger.error "Dust API request timed out: #{e.message}"
+    raise StandardError, "Dust API request timed out after #{READ_TIMEOUT} seconds"
+  end
+
+  def create_dust_conversation(prompt)
+    uri = URI("#{DUST_API_BASE_URL}/api/v1/w/#{@config.dust_workspace_id}/assistant/conversations")
+    request = Net::HTTP::Post.new(uri)
+    request['Authorization'] = "Bearer #{@config.dust_api_key}"
+    request['Content-Type'] = 'application/json'
+
+    request.body = {
+      message: {
+        content: prompt,
+        mentions: [{ configurationId: @config.dust_agent_id }]
+      },
+      blocking: true # Wait for the agent response
+    }.to_json
+
+    @logger.debug 'Creating Dust conversation...'
+
+    response = Net::HTTP.start(uri.hostname, uri.port,
+                               use_ssl: true,
+                               open_timeout: HTTP_TIMEOUT,
+                               read_timeout: READ_TIMEOUT) do |http|
+      http.request(request)
+    end
+
+    handle_api_response(response, 'Dust')
+  end
+
+  def get_dust_response(conversation_id)
+    uri = URI("#{DUST_API_BASE_URL}/api/v1/w/#{@config.dust_workspace_id}/assistant/conversations/#{conversation_id}")
+    request = Net::HTTP::Get.new(uri)
+    request['Authorization'] = "Bearer #{@config.dust_api_key}"
+
+    @logger.debug "Fetching Dust conversation: #{conversation_id}"
+
+    response = Net::HTTP.start(uri.hostname, uri.port,
+                               use_ssl: true,
+                               open_timeout: HTTP_TIMEOUT,
+                               read_timeout: READ_TIMEOUT) do |http|
+      http.request(request)
+    end
+
+    handle_api_response(response, 'Dust')
+  end
+
+  def handle_api_response(response, provider_name)
     unless response.code == '200'
-      error_msg = "Anthropic API request failed with status #{response.code}: #{response.body}"
+      error_msg = "#{provider_name} API request failed with status #{response.code}: #{response.body}"
       @logger.error error_msg
       raise StandardError, error_msg
     end
 
     JSON.parse(response.body)
   rescue JSON::ParserError => e
-    @logger.error "Failed to parse Anthropic API response: #{e.message}"
-    raise StandardError, "Invalid JSON response from Anthropic API: #{e.message}"
+    @logger.error "Failed to parse #{provider_name} API response: #{e.message}"
+    raise StandardError, "Invalid JSON response from #{provider_name} API: #{e.message}"
   end
 
-  def extract_review_content(api_response)
+  def extract_anthropic_content(api_response)
     content = api_response.dig('content', 0, 'text')
 
     if content.nil? || content.empty?
-      @logger.warn 'Claude returned empty review content'
-      return 'Claude did not return a review. Please check the API response and try again.'
+      @logger.warn 'Anthropic returned empty review content'
+      return 'Anthropic did not return a review. Please check the API response and try again.'
     end
 
-    @logger.info 'Successfully received review from Claude'
+    @logger.info 'Successfully received review from Anthropic Claude'
+    content
+  end
+
+  def extract_dust_content(api_response)
+    # Extract content from the agent's response in the conversation
+    messages = api_response.dig('conversation', 'content')
+    return 'Dust did not return a conversation. Please check the API response and try again.' if messages.nil? || messages.empty?
+
+    # Find the last agent message (should be the response to our prompt)
+    agent_messages = messages.flatten.select { |msg| msg['type'] == 'agent_message' }
+    
+    if agent_messages.empty?
+      @logger.warn 'Dust returned no agent messages'
+      return 'Dust agent did not respond. Please check the agent configuration and try again.'
+    end
+
+    # Get the content from the last agent message
+    last_response = agent_messages.last
+    content = last_response.dig('content')
+
+    if content.nil? || content.empty?
+      @logger.warn 'Dust agent returned empty content'
+      return 'Dust agent returned an empty response. Please check the agent configuration and try again.'
+    end
+
+    @logger.info 'Successfully received review from Dust AI'
     content
   end
 
@@ -238,12 +368,13 @@ class PullRequestReviewer
 
   def format_github_comment(review_content)
     timestamp = Time.now.strftime('%Y-%m-%d %H:%M:%S UTC')
+    provider_name = @config.anthropic? ? 'Anthropic Claude' : 'Dust AI'
 
     <<~COMMENT
       #{review_content}
 
       ---
-      *Review generated by Claude Opus 4 at #{timestamp}*
+      *Review generated by #{provider_name} at #{timestamp}*
     COMMENT
   end
 end
