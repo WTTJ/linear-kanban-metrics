@@ -5,6 +5,7 @@
 # Runs comprehensive quality checks including linting, security, and tests
 
 require 'fileutils'
+require 'English'
 require_relative 'ci_logger'
 
 class CIQualityChecker
@@ -53,17 +54,26 @@ class CIQualityChecker
     summary.puts '=== RuboCop Analysis ==='
     summary.flush
 
+    # First run to capture output for the summary
     rubocop_command = 'bundle exec rubocop --format simple'
-
     logger.debug("Executing command: #{rubocop_command}")
-    success = system("#{rubocop_command} | tee -a #{summary_file}")
+
+    # Capture output and check exit status
+    output = `#{rubocop_command} 2>&1`
+    success = $CHILD_STATUS.success?
+
+    # Write output to summary file
+    File.open(summary_file, 'a') do |f|
+      f.puts output
+    end
 
     logger.command(rubocop_command, success: success)
 
     if success
       logger.success('RuboCop: No violations found')
     else
-      logger.warning('RuboCop: Style violations detected')
+      logger.error('RuboCop: Style violations detected')
+      exit(1) # Fail the CI if style violations are found
     end
 
     summary.puts ''

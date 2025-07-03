@@ -20,11 +20,15 @@ class CISecurityScanner
     logger.info('Starting security analysis...')
 
     setup_directories
-    success = run_brakeman_analysis
-    display_security_summary
+    run_brakeman_analysis
+    violations = display_security_summary
+
+    if violations.positive?
+      logger.error("Exiting with failure due to #{violations} security violations")
+      exit(1)
+    end
 
     logger.success('Security analysis completed!')
-    success
   end
 
   private
@@ -66,30 +70,41 @@ class CISecurityScanner
     logger.section('Brakeman Security Analysis Summary')
 
     if File.exist?("#{results_dir}/brakeman.txt")
-      File.read("#{results_dir}/brakeman.txt").lines.each { |line| logger.indent(line.chomp) }
+      content = File.read("#{results_dir}/brakeman.txt")
+      content.lines.each { |line| logger.indent(line.chomp) }
+
+      # Count warnings from the text output
+      warning_match = content.scan(/\d+ warning/).join.scan(/\d+/).first
+      warning_match ? warning_match.to_i : 0
     elsif File.exist?("#{results_dir}/brakeman.json")
       display_json_summary
     else
       logger.success('No security issues found!')
+      0
     end
   end
 
   def display_json_summary
     json_data = JSON.parse(File.read("#{results_dir}/brakeman.json"))
 
+    warning_count = 0
     if json_data['warnings']&.any?
-      logger.warning("Found #{json_data['warnings'].size} security warnings")
+      warning_count = json_data['warnings'].size
+      logger.warning("Found #{warning_count} security warnings")
       json_data['warnings'].first(3).each_with_index do |warning, index|
         logger.indent("#{index + 1}. #{warning['warning_type']}: #{warning['message']}")
       end
-      logger.indent('... see full report for details') if json_data['warnings'].size > 3
+      logger.indent('... see full report for details') if warning_count > 3
     else
       logger.success('No security warnings found!')
     end
 
     logger.error("Found #{json_data['errors'].size} errors during analysis") if json_data['errors']&.any?
+
+    warning_count
   rescue JSON::ParserError => e
     logger.error("Could not parse Brakeman JSON output: #{e.message}")
+    0
   end
 end
 

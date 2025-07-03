@@ -21,7 +21,12 @@ class CILinter
 
     setup_directories
     run_rubocop_analysis
-    display_lint_summary
+    offense_count = display_lint_summary
+
+    if offense_count.positive?
+      logger.error("Exiting with failure due to #{offense_count} style violations")
+      exit(1)
+    end
 
     logger.success('Linting analysis completed!')
   end
@@ -65,6 +70,7 @@ class CILinter
       display_json_summary
     else
       logger.info('RuboCop analysis completed - see artifacts for details')
+      0 # No offense count available
     end
   end
 
@@ -94,11 +100,15 @@ class CILinter
       else
         logger.success('No style violations found!')
       end
+
+      summary['offense_count']
     else
       logger.info('RuboCop analysis completed')
+      0 # No summary available
     end
   rescue JSON::ParserError => e
     logger.error("Could not parse RuboCop JSON output: #{e.message}")
+    0 # Assume no offenses if we can't parse
   end
 end
 
