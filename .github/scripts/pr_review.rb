@@ -63,7 +63,7 @@ class ConfigValidationService
   end
 
   def validate(config)
-    @validators.flat_map { |validator| validator.validate(config) }
+    validators.flat_map { |validator| validator.validate(config) }
   end
 
   private
@@ -79,7 +79,8 @@ end
 
 # Configuration value object for PR reviewer
 class ReviewerConfig
-  attr_reader :repo, :pr_number, :github_token, :api_provider, :anthropic_api_key, :dust_api_key, :dust_workspace_id, :dust_agent_id
+  attr_reader :repo, :pr_number, :github_token, :api_provider, :anthropic_api_key, :dust_api_key, :dust_workspace_id, :dust_agent_id,
+              :validation_service
 
   def initialize(env = ENV, validation_service = ConfigValidationService.new)
     @repo = env.fetch('GITHUB_REPOSITORY', nil)
@@ -98,7 +99,7 @@ class ReviewerConfig
   end
 
   def errors
-    @validation_service.validate(self)
+    validation_service.validate(self)
   end
 
   def anthropic?
@@ -113,7 +114,7 @@ end
 # File reading service with security validation
 class SecureFileReader
   ALLOWED_PREFIXES = ['doc/', 'reports/', '.github/scripts/'].freeze
-  
+
   attr_reader :logger
 
   def initialize(logger)
@@ -124,13 +125,13 @@ class SecureFileReader
     validate_file_path!(file_path)
     return File.read(file_path) if File.exist?(file_path)
 
-    @logger.warn "File not found: #{file_path}, using fallback"
+    logger.warn "File not found: #{file_path}, using fallback"
     fallback
   rescue ArgumentError
     # Re-raise validation errors (security issues)
     raise
   rescue StandardError => e
-    @logger.warn "Error reading file #{file_path}: #{e.message}, using fallback"
+    logger.warn "Error reading file #{file_path}: #{e.message}, using fallback"
     fallback
   end
 
@@ -158,30 +159,30 @@ class ReviewDataGatherer
   end
 
   def gather_data(config)
-    @logger.info 'Gathering review data...'
+    logger.info 'Gathering review data...'
 
     {
-      guidelines: @file_reader.read_file('doc/CODING_STANDARDS.md'),
-      rspec_results: @file_reader.read_file('reports/rspec.txt'),
-      rubocop_results: @file_reader.read_file('reports/rubocop.txt'),
-      brakeman_results: @file_reader.read_file('reports/brakeman.txt'),
+      guidelines: file_reader.read_file('doc/CODING_STANDARDS.md'),
+      rspec_results: file_reader.read_file('reports/rspec.txt'),
+      rubocop_results: file_reader.read_file('reports/rubocop.txt'),
+      brakeman_results: file_reader.read_file('reports/brakeman.txt'),
       pr_diff: fetch_pr_diff(config),
-      prompt_template: @file_reader.read_file('.github/scripts/pr_review_prompt_template.md')
+      prompt_template: file_reader.read_file('.github/scripts/pr_review_prompt_template.md')
     }
   end
 
   private
 
   def fetch_pr_diff(config)
-    @logger.debug "Fetching PR diff for #{config.repo}##{config.pr_number}"
+    logger.debug "Fetching PR diff for #{config.repo}##{config.pr_number}"
 
-    @github_client.pull_request(
+    github_client.pull_request(
       config.repo,
       config.pr_number,
       accept: 'application/vnd.github.v3.diff'
     )
   rescue StandardError => e
-    @logger.warn "Failed to fetch PR diff: #{e.message}"
+    logger.warn "Failed to fetch PR diff: #{e.message}"
     'PR diff not available.'
   end
 end
@@ -252,20 +253,20 @@ class HTTPClient
 
     handle_response(response)
   rescue Net::OpenTimeout, Net::ReadTimeout => e
-    @logger.error "HTTP request timed out: #{e.message}"
+    logger.error "HTTP request timed out: #{e.message}"
     raise StandardError, "HTTP request timed out after #{@read_timeout} seconds"
   end
 
   def handle_response(response)
     unless response.code == '200'
       error_msg = "HTTP request failed with status #{response.code}: #{response.body}"
-      @logger.error error_msg
+      logger.error error_msg
       raise StandardError, error_msg
     end
 
     JSON.parse(response.body)
   rescue JSON::ParserError => e
-    @logger.error "Failed to parse HTTP response: #{e.message}"
+    logger.error "Failed to parse HTTP response: #{e.message}"
     raise StandardError, "Invalid JSON response: #{e.message}"
   end
 end
@@ -287,11 +288,11 @@ class AnthropicProvider < AIProvider
   end
 
   def request_review(prompt)
-    @logger.info 'Requesting review from Anthropic Claude...'
+    logger.info 'Requesting review from Anthropic Claude...'
 
     uri = URI('https://api.anthropic.com/v1/messages')
     headers = {
-      'x-api-key' => @config.anthropic_api_key,
+      'x-api-key' => config.anthropic_api_key,
       'anthropic-version' => API_VERSION,
       'content-type' => 'application/json'
     }
@@ -302,8 +303,8 @@ class AnthropicProvider < AIProvider
       messages: [{ role: 'user', content: prompt }]
     }.to_json
 
-    @logger.debug 'Sending request to Anthropic API...'
-    response = @http_client.post(uri, headers, body)
+    logger.debug 'Sending request to Anthropic API...'
+    response = http_client.post(uri, headers, body)
     extract_content(response)
   end
 
@@ -317,11 +318,11 @@ class AnthropicProvider < AIProvider
     content = api_response.dig('content', 0, 'text')
 
     if content.nil? || content.empty?
-      @logger.warn 'Anthropic returned empty review content'
+      logger.warn 'Anthropic returned empty review content'
       return 'Anthropic did not return a review. Please check the API response and try again.'
     end
 
-    @logger.info 'Successfully received review from Anthropic Claude'
+    logger.info 'Successfully received review from Anthropic Claude'
     content
   end
 end
@@ -331,11 +332,11 @@ module DustMessageExtractor
   def extract_messages_from_response(api_response)
     messages = api_response.dig('conversation', 'content')
     if messages.nil? || messages.empty?
-      @logger.warn "No conversation content found. API response keys: #{api_response.keys}"
+      logger.warn "No conversation content found. API response keys: #{api_response.keys}"
       return 'Dust did not return a conversation. Please check the API response and try again.'
     end
 
-    @logger.debug "Found #{messages.length} messages in conversation"
+    logger.debug "Found #{messages.length} messages in conversation"
     messages
   end
 
@@ -344,10 +345,10 @@ module DustMessageExtractor
     all_messages = messages.is_a?(Array) ? messages.flatten : [messages]
     agent_messages = all_messages.select { |msg| msg&.dig('type') == 'agent_message' }
 
-    @logger.debug "Found #{agent_messages.length} agent messages"
+    logger.debug "Found #{agent_messages.length} agent messages"
 
     if agent_messages.empty?
-      @logger.warn "No agent messages found. All message types: #{all_messages.filter_map { |m| m&.dig('type') }.uniq}"
+      logger.warn "No agent messages found. All message types: #{all_messages.filter_map { |m| m&.dig('type') }.uniq}"
       return 'Dust agent did not respond. Please check the agent configuration and try again.'
     end
 
@@ -380,7 +381,7 @@ module DustCitationProcessor
 
     # Create sequential mapping: each unique marker gets next available citation
     marker_to_reference = build_sequential_mapping(citation_markers, citations)
-    @logger.debug "Citation marker to reference mapping: #{marker_to_reference.inspect}"
+    logger.debug "Citation marker to reference mapping: #{marker_to_reference.inspect}"
 
     replace_markers_with_sequential_references(content, marker_to_reference)
   end
@@ -391,7 +392,7 @@ module DustCitationProcessor
     unique_markers = []
     content.scan(/:cite\[([^\]]+)\]/) do |match|
       marker_content = match.first.strip
-      
+
       # Check if this is a comma-separated list
       if marker_content.include?(',')
         # Split comma-separated markers and add each unique one
@@ -410,9 +411,7 @@ module DustCitationProcessor
     # Map each unique citation marker to sequential reference numbers
     marker_to_reference = {}
     citation_markers.each_with_index do |marker, index|
-      if index < citations.length
-        marker_to_reference[marker] = index + 1
-      end
+      marker_to_reference[marker] = index + 1 if index < citations.length
     end
     marker_to_reference
   end
@@ -426,7 +425,7 @@ module DustCitationProcessor
         # Split and map each individual citation ID
         individual_markers = marker_content.split(',').map(&:strip)
         references = individual_markers.filter_map { |marker| marker_to_reference[marker] }
-        
+
         if references.any?
           if references.length == 1
             "<sup>[#{references.first}](#ref-#{references.first})</sup>"
@@ -440,7 +439,7 @@ module DustCitationProcessor
       else
         # Single citation ID
         reference_number = marker_to_reference[marker_content]
-        
+
         if reference_number
           "<sup>[#{reference_number}](#ref-#{reference_number})</sup>"
         else
@@ -558,18 +557,28 @@ module DustResponseProcessor
   def extract_final_content_with_citations(agent_messages)
     # Get the latest agent message content and citations
     latest_message = agent_messages.last
+
+    # Check if the agent message has succeeded status
+    status = latest_message&.dig('status')
+    logger.debug "Agent message status: #{status}"
+
+    if status != 'succeeded'
+      logger.warn "Agent message not ready, status: #{status || 'unknown'}"
+      return 'retry_needed'
+    end
+
     content = latest_message&.dig('content')
     citations = latest_message&.dig('citations') || []
 
-    @logger.debug "Latest agent message content: #{content&.slice(0, 100)}..."
-    @logger.debug "Found #{citations.length} citations" if citations.any?
+    logger.debug "Latest agent message content: #{content&.slice(0, 100)}..."
+    logger.debug "Found #{citations.length} citations" if citations.any?
 
     if content.nil? || content.empty?
-      @logger.warn 'Dust agent returned empty content'
+      logger.warn 'Dust agent returned empty content'
       return 'Dust agent returned an empty response. Please check the agent configuration and try again.'
     end
 
-    @logger.info 'Successfully received review from Dust AI'
+    logger.info 'Successfully received review from Dust AI'
 
     # Return content with citations metadata if available
     if citations.any?
@@ -595,22 +604,22 @@ class DustProvider < AIProvider
   end
 
   def request_review(prompt)
-    @logger.info 'Requesting review from Dust AI...'
+    logger.info 'Requesting review from Dust AI...'
 
     conversation = create_conversation(prompt)
     conversation_id = conversation.dig('conversation', 'sId')
 
     if conversation_id.nil?
-      @logger.error "Failed to create Dust conversation. Response: #{conversation.inspect}"
+      logger.error "Failed to create Dust conversation. Response: #{conversation.inspect}"
       return 'Failed to create Dust conversation. Please check your configuration and try again.'
     end
 
-    @logger.debug "Created Dust conversation: #{conversation_id}"
+    logger.debug "Created Dust conversation: #{conversation_id}"
 
     # Give the agent more time to process before fetching response
     # GitHub Actions might need longer due to network latency
     initial_wait = ENV['GITHUB_ACTIONS'] ? 8 : 3
-    @logger.debug "Waiting #{initial_wait} seconds for agent to process..."
+    logger.debug "Waiting #{initial_wait} seconds for agent to process..."
     sleep(initial_wait)
 
     get_response_with_retries(conversation_id)
@@ -623,9 +632,9 @@ class DustProvider < AIProvider
   private
 
   def create_conversation(prompt)
-    uri = URI("#{API_BASE_URL}/api/v1/w/#{@config.dust_workspace_id}/assistant/conversations")
+    uri = URI("#{API_BASE_URL}/api/v1/w/#{config.dust_workspace_id}/assistant/conversations")
     headers = {
-      'Authorization' => "Bearer #{@config.dust_api_key}",
+      'Authorization' => "Bearer #{config.dust_api_key}",
       'Content-Type' => 'application/json'
     }
 
@@ -639,24 +648,24 @@ class DustProvider < AIProvider
           fullName: 'GitHub PR Reviewer',
           origin: 'api'
         },
-        mentions: [{ configurationId: @config.dust_agent_id }]
+        mentions: [{ configurationId: config.dust_agent_id }]
       },
       blocking: true,
       streamGenerationEvents: false
     }.to_json
 
-    @logger.debug "Creating Dust conversation with prompt length: #{prompt.length} chars"
-    @logger.debug "Agent ID: '#{@config.dust_agent_id}' (length: #{@config.dust_agent_id&.length})"
-    @logger.debug "Mentions array: [{ configurationId: '#{@config.dust_agent_id}' }]"
-    @http_client.post(uri, headers, body)
+    logger.debug "Creating Dust conversation with prompt length: #{prompt.length} chars"
+    logger.debug "Agent ID: '#{config.dust_agent_id}' (length: #{config.dust_agent_id&.length})"
+    logger.debug "Mentions array: [{ configurationId: '#{config.dust_agent_id}' }]"
+    http_client.post(uri, headers, body)
   end
 
   def get_response(conversation_id)
-    uri = URI("#{API_BASE_URL}/api/v1/w/#{@config.dust_workspace_id}/assistant/conversations/#{conversation_id}")
-    headers = { 'Authorization' => "Bearer #{@config.dust_api_key}" }
+    uri = URI("#{API_BASE_URL}/api/v1/w/#{config.dust_workspace_id}/assistant/conversations/#{conversation_id}")
+    headers = { 'Authorization' => "Bearer #{config.dust_api_key}" }
 
-    @logger.debug "Fetching Dust conversation: #{conversation_id}"
-    response = @http_client.get(uri, headers)
+    logger.debug "Fetching Dust conversation: #{conversation_id}"
+    response = http_client.get(uri, headers)
     extract_content(response)
   end
 
@@ -666,27 +675,27 @@ class DustProvider < AIProvider
     while retries < max_retries
       response = attempt_fetch_response(conversation_id, retries, max_retries)
 
-      @logger.debug "Response validation - length: #{response.length}, starts with: '#{response[0..50]}...'"
+      logger.debug "Response validation - length: #{response.length}, starts with: '#{response[0..50]}...'"
 
       if response_is_valid?(response)
-        @logger.debug 'Response validated successfully, returning content'
+        logger.debug 'Response validated successfully, returning content'
         return response
       end
 
-      @logger.debug "Response not valid, will retry. Response: '#{response[0..100]}...'"
+      logger.debug "Response not valid, will retry. Response: '#{response[0..100]}...'"
       handle_retry_delay(retries, max_retries)
       retries += 1
     end
 
-    @logger.error "Agent did not respond after #{max_retries} attempts with longer timeouts"
+    logger.error "Agent did not respond after #{max_retries} attempts with longer timeouts"
     create_fallback_message(conversation_id)
   end
 
   def attempt_fetch_response(conversation_id, retries, max_retries)
-    @logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
+    logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
     get_response(conversation_id)
   rescue StandardError => e
-    @logger.warn "Error fetching response (attempt #{retries + 1}): #{e.message}"
+    logger.warn "Error fetching response (attempt #{retries + 1}): #{e.message}"
     raise e if retries >= max_retries - 1
 
     sleep(3)
@@ -697,8 +706,10 @@ class DustProvider < AIProvider
     # Handle nil responses first
     return false if response.nil?
 
-    # Check if response is specifically an error message (exact matches)
+    # Check if response is specifically a retry signal
     return false if response == 'retry_needed'
+
+    # Check if response is specifically an error message (exact matches)
     return false if response.start_with?('Dust agent did not respond.')
     return false if response.start_with?('Dust agent returned an empty response.')
     return false if response.start_with?('Dust did not return a conversation.')
@@ -707,21 +718,9 @@ class DustProvider < AIProvider
     # Check for empty or whitespace-only responses
     return false if response.strip.empty?
 
-    # Check for very short responses that are likely errors (but allow legitimate short reviews)
-    # Valid short responses often contain meaningful content like "LGTM", "Approved", emojis, etc.
-    stripped_response = response.strip
-    return false if stripped_response.empty?
-
-    # Check for single-word error responses
-    words = stripped_response.split(/\s+/)
-    if words.length == 1 && stripped_response.length < 10
-      # Single short word is likely an error unless it's a common review term
-      common_review_terms = ['lgtm', 'approved', 'approve', 'good', 'ok', 'yes', '✅', '👍', '👌', '🎉']
-      return common_review_terms.any? { |term| stripped_response.downcase.include?(term) || stripped_response.include?(term) }
-    end
-
-    # If we get here, it's likely a valid response (actual review content)
-    @logger.debug "Response validated as valid: length=#{response.length}, content='#{response[0..50]}...'"
+    # Since we now check status="succeeded" in extract_final_content_with_citations,
+    # we can be less strict here and trust that valid content made it through
+    logger.debug "Response validated as valid: length=#{response.length}, content='#{response[0..50]}...'"
     true
   end
 
@@ -729,7 +728,7 @@ class DustProvider < AIProvider
     return unless retries < max_retries - 1
 
     wait_time = (retries + 1) * 5 # Longer wait: 5s, 10s, 15s, 20s
-    @logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
+    logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
     sleep(wait_time)
   end
 
@@ -747,14 +746,14 @@ class DustProvider < AIProvider
 
       **Suggested Actions:**
       1. Re-run the workflow in a few minutes
-      2. Check agent status in Dust dashboard: https://dust.tt/w/#{@config.dust_workspace_id}/assistant/#{conversation_id}
+      2. Check agent status in Dust dashboard: https://dust.tt/w/#{config.dust_workspace_id}/assistant/#{conversation_id}
       3. Verify agent ID has no trailing whitespace
       4. Consider using the Anthropic provider as fallback
 
       **Debug Information:**
       - Conversation ID: #{conversation_id}
-      - Workspace: #{@config.dust_workspace_id}
-      - Agent: '#{@config.dust_agent_id}' (length: #{@config.dust_agent_id&.length})
+      - Workspace: #{config.dust_workspace_id}
+      - Agent: '#{config.dust_agent_id}' (length: #{config.dust_agent_id&.length})
       - Timestamp: #{Time.now}
 
       The conversation was created successfully but the agent did not generate a response within the timeout period.
@@ -787,13 +786,13 @@ class GitHubCommentService
   end
 
   def post_comment(config, content, provider_name)
-    @logger.info 'Posting review comment to GitHub...'
+    logger.info 'Posting review comment to GitHub...'
 
     comment_body = format_comment(content, provider_name)
-    @github_client.add_comment(config.repo, config.pr_number, comment_body)
-    @logger.info 'Review comment posted successfully'
+    github_client.add_comment(config.repo, config.pr_number, comment_body)
+    logger.info 'Review comment posted successfully'
   rescue StandardError => e
-    @logger.error "Failed to post GitHub comment: #{e.message}"
+    logger.error "Failed to post GitHub comment: #{e.message}"
     raise StandardError, "GitHub comment posting failed: #{e.message}"
   end
 
@@ -837,7 +836,7 @@ end
 
 # Main orchestrator class (follows Single Responsibility Principle)
 class PullRequestReviewer
-  attr_reader :config, :logger, :github_client, :http_client, :file_reader, 
+  attr_reader :config, :logger, :github_client, :http_client, :file_reader,
               :data_gatherer, :prompt_builder, :ai_provider, :comment_service
 
   def initialize(config = nil, dependencies = {})
@@ -855,28 +854,28 @@ class PullRequestReviewer
   end
 
   def run
-    @logger.info "Starting PR review for repository: #{@config.repo}, PR: #{@config.pr_number}"
-    @logger.info "Using API provider: #{@config.api_provider}"
+    logger.info "Starting PR review for repository: #{config.repo}, PR: #{config.pr_number}"
+    logger.info "Using API provider: #{config.api_provider}"
 
-    review_data = @data_gatherer.gather_data(@config)
-    prompt = @prompt_builder.build_prompt(review_data)
-    ai_response = @ai_provider.request_review(prompt)
-    @comment_service.post_comment(@config, ai_response, @ai_provider.provider_name)
+    review_data = data_gatherer.gather_data(config)
+    prompt = prompt_builder.build_prompt(review_data)
+    ai_response = ai_provider.request_review(prompt)
+    comment_service.post_comment(config, ai_response, ai_provider.provider_name)
 
-    @logger.info 'PR review completed successfully'
+    logger.info 'PR review completed successfully'
   rescue StandardError => e
-    @logger.error "PR review failed: #{e.message}"
-    @logger.debug e.backtrace.join("\n")
+    logger.error "PR review failed: #{e.message}"
+    logger.debug e.backtrace.join("\n")
     raise
   end
 
   private
 
   def validate_configuration!
-    return if @config.valid?
+    return if config.valid?
 
-    @logger.error "Configuration validation failed: #{@config.errors.join(', ')}"
-    raise ArgumentError, "Invalid configuration: #{@config.errors.join(', ')}"
+    logger.error "Configuration validation failed: #{config.errors.join(', ')}"
+    raise ArgumentError, "Invalid configuration: #{config.errors.join(', ')}"
   end
 end
 

@@ -12,6 +12,8 @@ require 'stringio'
 require_relative '../../.github/scripts/pr_review'
 
 class CitationFlowDebugger
+  attr_reader :logger
+
   def initialize
     @logger = Logger.new($stdout)
     @logger.level = Logger::DEBUG
@@ -25,7 +27,7 @@ class CitationFlowDebugger
     # Create a real DustProvider instance
     config = create_test_config
     http_client = create_mock_http_client
-    provider = DustProvider.new(config, http_client, @logger)
+    provider = DustProvider.new(config, http_client, logger)
 
     # Use the exact response structure from your log
     api_response = create_real_api_response

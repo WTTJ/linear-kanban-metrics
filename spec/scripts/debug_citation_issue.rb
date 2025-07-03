@@ -12,6 +12,9 @@ require_relative '../../.github/scripts/pr_review'
 
 class CitationDebugger
   include DustCitationProcessor
+  include DustResponseProcessor
+
+  attr_reader :logger
 
   def initialize
     @logger = Logger.new($stdout)
@@ -57,6 +60,7 @@ class CitationDebugger
             {
               'sId' => 'msg123',
               'type' => 'agent_message',
+              'status' => 'succeeded',
               'content' => "## Code Review\n\nThis PR looks good :cite[aa,eu] but needs some improvements :cite[bb].\n\n### Issues Found\n\n1. Missing error handling :cite[cc]\n2. Documentation needs update\n\n**Overall**: Approved with minor changes needed.",
               'citations' => []
             }

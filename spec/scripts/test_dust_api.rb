@@ -135,6 +135,8 @@ end
 class DustAPIClient
   include CitationFormatter
 
+  attr_reader :logger
+
   API_BASE_URL = 'https://dust.tt'
 
   def initialize(api_key, workspace_id, agent_id, logger)
@@ -145,7 +147,7 @@ class DustAPIClient
   end
 
   def test_connection
-    @logger.info '🔌 Testing Dust API connection...'
+    logger.info '🔌 Testing Dust API connection...'
 
     prompt = create_test_prompt
     conversation = create_conversation(prompt)
@@ -153,13 +155,13 @@ class DustAPIClient
 
     return handle_failed_conversation_creation unless conversation_id
 
-    @logger.info "✅ Conversation created: #{conversation_id}"
+    logger.info "✅ Conversation created: #{conversation_id}"
     sleep(3) # Wait for processing
 
     response = get_response_with_retries(conversation_id)
     evaluate_test_response(response)
   rescue StandardError => e
-    @logger.error "❌ API test failed: #{e.message}"
+    logger.error "❌ API test failed: #{e.message}"
     false
   end
 
@@ -169,7 +171,7 @@ class DustAPIClient
 
   # rubocop:disable Naming/PredicateMethod
   def handle_failed_conversation_creation
-    @logger.error '❌ Failed to create conversation'
+    logger.error '❌ Failed to create conversation'
     false
   end
 
@@ -192,7 +194,7 @@ class DustAPIClient
   end
 
   def display_successful_response(response)
-    @logger.info '✅ Response received!'
+    logger.info '✅ Response received!'
     puts "\n#{'=' * 60}"
     puts '🤖 DUST AI RESPONSE:'
     puts '=' * 60
@@ -219,16 +221,16 @@ class DustAPIClient
   end
 
   def handle_response_failure(response)
-    @logger.error '❌ No response received from agent'
+    logger.error '❌ No response received from agent'
 
     case response
     when Hash
       content = response[:content] || response['content']
-      @logger.error "Response content: #{content}" if content
+      logger.error "Response content: #{content}" if content
     when String
-      @logger.error "Response content: #{response}"
+      logger.error "Response content: #{response}"
     else
-      @logger.error "Unexpected response type: #{response.class}"
+      logger.error "Unexpected response type: #{response.class}"
     end
   end
 
@@ -255,9 +257,9 @@ class DustAPIClient
       streamGenerationEvents: false
     }.to_json
 
-    @logger.debug '📤 Creating conversation...'
+    logger.debug '📤 Creating conversation...'
     response = make_request(uri, :post, headers, body)
-    @logger.debug "📥 Conversation response: #{response.keys}" if response.is_a?(Hash)
+    logger.debug "📥 Conversation response: #{response.keys}" if response.is_a?(Hash)
     response
   end
 
@@ -265,10 +267,10 @@ class DustAPIClient
     uri = URI("#{API_BASE_URL}/api/v1/w/#{@workspace_id}/assistant/conversations/#{conversation_id}")
     headers = { 'Authorization' => "Bearer #{@api_key}" }
 
-    @logger.debug "📤 Fetching conversation: #{conversation_id}"
+    logger.debug "📤 Fetching conversation: #{conversation_id}"
     response = make_request(uri, :get, headers)
 
-    @logger.debug "Full Dust API response: #{response.inspect}"
+    logger.debug "Full Dust API response: #{response.inspect}"
 
     messages = extract_messages(response)
     return nil if messages.nil? || messages.empty?
@@ -279,11 +281,11 @@ class DustAPIClient
   def extract_messages(response)
     messages = response.dig('conversation', 'content')
     if messages.nil? || messages.empty?
-      @logger.debug "No conversation content found. API response keys: #{response.keys}"
+      logger.debug "No conversation content found. API response keys: #{response.keys}"
       return nil
     end
 
-    @logger.debug "Found #{messages.length} messages in conversation"
+    logger.debug "Found #{messages.length} messages in conversation"
     messages
   end
 
@@ -291,10 +293,10 @@ class DustAPIClient
     all_messages = messages.is_a?(Array) ? messages.flatten : [messages]
     agent_messages = all_messages.select { |msg| msg&.dig('type') == 'agent_message' }
 
-    @logger.debug "Found #{agent_messages.length} agent messages"
+    logger.debug "Found #{agent_messages.length} agent messages"
 
     if agent_messages.empty?
-      @logger.debug "No agent messages found. All message types: #{all_messages.filter_map { |m| m&.dig('type') }.uniq}"
+      logger.debug "No agent messages found. All message types: #{all_messages.filter_map { |m| m&.dig('type') }.uniq}"
       return nil
     end
 
@@ -305,8 +307,8 @@ class DustAPIClient
     content = message&.dig('content')
     citations = message&.dig('citations') || []
 
-    @logger.debug "Latest agent message content: #{content&.slice(0, 100)}..." if content
-    @logger.debug "Found #{citations.length} citations" if citations.any?
+    logger.debug "Latest agent message content: #{content&.slice(0, 100)}..." if content
+    logger.debug "Found #{citations.length} citations" if citations.any?
 
     # Return both content and citations
     {
@@ -331,17 +333,17 @@ class DustAPIClient
   end
 
   def attempt_get_response(conversation_id, retries, max_retries)
-    @logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
+    logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
     response = get_response(conversation_id)
 
     if response_has_content?(response)
-      @logger.debug 'Received valid response with content'
+      logger.debug 'Received valid response with content'
       return response
     end
 
     response
   rescue StandardError => e
-    @logger.error "Error fetching response (attempt #{retries + 1}): #{e.message}"
+    logger.error "Error fetching response (attempt #{retries + 1}): #{e.message}"
     sleep(2) if retries < max_retries - 1
     nil
   end
@@ -350,12 +352,12 @@ class DustAPIClient
     return unless retries < max_retries - 1
 
     wait_time = (retries + 1) * 3 # Progressive backoff: 3s, 6s, 9s
-    @logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
+    logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
     sleep(wait_time)
   end
 
   def create_no_response_result(max_retries)
-    @logger.error "Agent did not respond after #{max_retries} attempts"
+    logger.error "Agent did not respond after #{max_retries} attempts"
     {
       content: 'Dust agent did not respond after multiple attempts. The agent may be busy or misconfigured.',
       citations: []
@@ -390,13 +392,13 @@ class DustAPIClient
 
     unless response.code == '200'
       error_msg = "HTTP #{response.code}: #{response.body}"
-      @logger.error error_msg
+      logger.error error_msg
       raise StandardError, error_msg
     end
 
     JSON.parse(response.body)
   rescue JSON::ParserError => e
-    @logger.error "Failed to parse response: #{e.message}"
+    logger.error "Failed to parse response: #{e.message}"
     raise StandardError, "Invalid JSON response: #{e.message}"
   end
 end

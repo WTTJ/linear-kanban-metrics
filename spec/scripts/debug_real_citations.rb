@@ -65,6 +65,8 @@ REAL_RESPONSE_DATA = {
 class CitationDebugger
   include DustResponseProcessor
 
+  attr_reader :logger
+
   def initialize
     @logger = Logger.new($stdout)
     @logger.level = Logger::DEBUG

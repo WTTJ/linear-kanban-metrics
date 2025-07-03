@@ -12,6 +12,8 @@ require 'logger'
 require_relative '../../.github/scripts/pr_review'
 
 class RetryLogicDemonstration
+  attr_reader :logger
+
   def initialize
     @logger = Logger.new($stdout)
     @logger.level = Logger::INFO

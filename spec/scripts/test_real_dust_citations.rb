@@ -88,6 +88,8 @@ REAL_DUST_RESPONSE = {
 class RealDataCitationTestProcessor
   include DustResponseProcessor
 
+  attr_reader :logger
+
   def initialize
     @logger = Logger.new(StringIO.new) # Silent logger for testing
   end

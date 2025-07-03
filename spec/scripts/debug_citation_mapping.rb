@@ -11,6 +11,8 @@ require_relative '../../.github/scripts/pr_review'
 class CitationMapDebugger
   include DustCitationProcessor
 
+  attr_reader :logger
+
   def initialize
     @logger = Logger.new($stdout)
     @logger.level = Logger::DEBUG

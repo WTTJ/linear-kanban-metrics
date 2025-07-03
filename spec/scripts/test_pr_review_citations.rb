@@ -12,6 +12,7 @@ SAMPLE_RESPONSE = {
       [
         {
           'type' => 'agent_message',
+          'status' => 'succeeded',
           'content' => "## PR Review Test\n\n:cite[aw] This demonstrates single citation.\n\n:cite[gx,bt] This shows multi-citation support.\n\n:cite[unknown] This tests unknown citation handling.\n\n:cite[aw,unknown,bt] This tests mixed valid/invalid citations.",
           'citations' => [
             {
@@ -45,6 +46,8 @@ SAMPLE_RESPONSE = {
 # Test the DustResponseProcessor module
 class CitationTestProcessor
   include DustResponseProcessor
+
+  attr_reader :logger
 
   def initialize
     @logger = Logger.new(StringIO.new) # Silent logger for testing

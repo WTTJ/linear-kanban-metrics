@@ -275,7 +275,7 @@ RSpec.describe 'PR Review Refactored' do
       conversation_response = { 'conversation' => { 'sId' => 'conv123' } }
       response_data = {
         'conversation' => {
-          'content' => [[{ 'type' => 'agent_message', 'content' => 'review content' }]]
+          'content' => [[{ 'type' => 'agent_message', 'status' => 'succeeded', 'content' => 'review content' }]]
         }
       }
 

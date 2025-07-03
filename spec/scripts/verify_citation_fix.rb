@@ -11,6 +11,9 @@ require_relative '../../.github/scripts/pr_review'
 class CitationProcessingVerification
   include DustCitationProcessor
 
+  attr_reader :logger
+  
+
   def initialize
     @logger = Logger.new($stdout)
     @logger.level = Logger::DEBUG
@@ -71,6 +74,7 @@ class CitationProcessingVerification
     # Simulate agent message structure
     agent_messages = [
       {
+        'status' => 'succeeded',
         'content' => github_content,
         'citations' => []
       }
@@ -92,6 +96,8 @@ end
 
 class DustResponseProcessorTester
   include DustResponseProcessor
+
+  attr_reader :logger
 
   def initialize
     @logger = Logger.new($stdout)

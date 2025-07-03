@@ -10,6 +10,8 @@ require_relative '../../.github/scripts/pr_review'
 class CitationFormatTester
   include DustCitationProcessor
 
+  attr_reader :logger
+
   def initialize
     @logger = Logger.new(StringIO.new) # Silent logger
   end
