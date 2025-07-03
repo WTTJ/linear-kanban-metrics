@@ -409,6 +409,7 @@ module DustCitationProcessor
 
   def build_sequential_mapping(citation_markers, citations)
     # Map each unique citation marker to sequential reference numbers
+    # This handles the case where Dust citation IDs don't match content markers
     marker_to_reference = {}
     citation_markers.each_with_index do |marker, index|
       marker_to_reference[marker] = index + 1 if index < citations.length
@@ -451,7 +452,7 @@ module DustCitationProcessor
 
   def mark_unresolved_citations(content)
     # When no citations are available, mark all citation markers as unresolved
-    content.gsub(/:cite\[([^\]]+)\]/, '**\0**')
+    content.gsub(/:cite\[([^\]]+)\]/, '**:cite[\1]**')
   end
 
   def add_reference_list(content, citations)
@@ -568,7 +569,15 @@ module DustResponseProcessor
     end
 
     content = latest_message&.dig('content')
-    citations = latest_message&.dig('citations') || []
+    
+    # Try to extract citations from both possible structures
+    citations = extract_citations_from_actions(latest_message)
+    
+    # Fallback to legacy citations structure if no actions citations found
+    if citations.empty?
+      legacy_citations = latest_message&.dig('citations') || []
+      citations = legacy_citations if legacy_citations.any?
+    end
 
     logger.debug "Latest agent message content: #{content&.slice(0, 100)}..."
     logger.debug "Found #{citations.length} citations" if citations.any?
@@ -586,6 +595,37 @@ module DustResponseProcessor
     else
       content
     end
+  end
+
+  private
+
+  def extract_citations_from_actions(agent_message)
+    actions = agent_message&.dig('actions') || []
+    citations = []
+
+    actions.each do |action|
+      next unless action&.dig('type') == 'tool_action'
+      
+      output = action&.dig('output') || []
+      output.each do |item|
+        next unless item&.dig('type') == 'resource'
+        
+        resource = item&.dig('resource')
+        next unless resource&.dig('reference')
+        
+        # Convert Dust resource format to our expected citation format
+        citations << {
+          'id' => resource['reference'],
+          'reference' => {
+            'title' => resource['title'],
+            'href' => resource['uri']
+          }
+        }
+      end
+    end
+
+    logger.debug "Extracted #{citations.length} citations from actions"
+    citations
   end
 end
 
