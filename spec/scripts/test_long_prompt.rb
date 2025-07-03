@@ -80,6 +80,7 @@ def create_test_prompt
     +   end
     + end
     ```
+    Give references to the coding standards and design patterns above with links to the relevant sections.
 
     Please provide your review in markdown format.
   PROMPT
@@ -152,6 +153,7 @@ end
 def process_conversation_response(response)
   return false unless response.code == '200'
 
+  p JSON.pretty_generate(JSON.parse(response.body))
   conv_data = JSON.parse(response.body)
   messages = conv_data.dig('conversation', 'content')
 
@@ -180,27 +182,72 @@ def handle_agent_messages(messages)
 end
 
 def display_agent_response(content, citations)
+  display_response_header
+  processed_content = process_and_display_content(content, citations)
+  display_citations_if_present(citations)
+  display_response_summary(content, processed_content, citations)
+end
+
+def display_response_header
   puts "\n#{'=' * 60}"
   puts '🤖 DUST AI RESPONSE:'
   puts '=' * 60
   puts
-  puts content
+end
+
+def process_and_display_content(content, citations)
+  # Process citation markers in content
+  processed_content = citations.any? ? process_citation_markers(content, citations) : content
+  puts processed_content
   puts
+  processed_content
+end
 
-  # Display citations if present
-  if citations.any?
-    puts '📚 CITATIONS:'
-    puts '-' * 30
-    citations.each_with_index do |citation, index|
-      puts "#{index + 1}. #{format_citation(citation)}"
-    end
-    puts '-' * 30
-    puts
+def display_citations_if_present(citations)
+  return unless citations.any?
+
+  puts '📚 CITATIONS:'
+  puts '-' * 30
+  citations.each_with_index do |citation, index|
+    puts "#{index + 1}. #{format_citation(citation)}"
   end
+  puts '-' * 30
+  puts
+end
 
+def display_response_summary(content, processed_content, citations)
   puts '=' * 60
   puts "📏 Response length: #{content.length} characters"
+  puts "📏 Processed length: #{processed_content.length} characters"
   puts "📚 Citations found: #{citations.length}" if citations.any?
+end
+
+def process_citation_markers(content, citations)
+  # Create a citation map for lookup
+  citation_map = {}
+  citations.each_with_index do |citation, index|
+    # Dust citations usually have an 'id' field
+    citation_map[citation['id']] = index + 1 if citation.is_a?(Hash) && citation['id']
+  end
+
+  # Replace :cite[id] or :cite[id1,id2,...] markers with numbered references
+  content.gsub(/:cite\[([^\]]+)\]/) do |match|
+    cite_ids_string = Regexp.last_match(1)
+    cite_ids = cite_ids_string.split(',').map(&:strip)
+
+    # Process each citation ID and collect valid references
+    references = cite_ids.filter_map do |cite_id|
+      citation_map[cite_id] if citation_map[cite_id]
+    end
+
+    if references.any?
+      # Format as [1], [1,2], or [1,2,3] etc.
+      "[#{references.join(',')}]"
+    else
+      # If no citation IDs found, keep the original marker but make it more visible
+      "**#{match}**"
+    end
+  end
 end
 
 def format_citation(citation)
@@ -215,14 +262,59 @@ def format_citation(citation)
 end
 
 def format_hash_citation(citation)
-  title = citation['title'] || citation[:title]
-  url = citation['url'] || citation[:url]
-  snippet = citation['snippet'] || citation[:snippet]
+  # Handle Dust's various citation formats
+  if citation['reference']
+    format_reference_citation(citation)
+  elsif citation['document']
+    format_document_citation(citation)
+  elsif citation['title'] || citation['url']
+    format_basic_citation(citation)
+  else
+    citation.to_s
+  end
+end
+
+def format_reference_citation(citation)
+  ref = citation['reference']
+  title = ref['title'] || 'Untitled'
+  url = ref['href']
+
+  if url
+    "[#{title}](#{url})"
+  else
+    title
+  end
+end
+
+def format_document_citation(citation)
+  doc = citation['document']
+  title = doc['title'] || doc['name'] || 'Document'
+  url = doc['url'] || doc['href']
+
+  if url
+    "[#{title}](#{url})"
+  else
+    title
+  end
+end
+
+def format_basic_citation(citation)
+  title = citation['title'] || citation['name'] || 'Reference'
+  url = citation['url'] || citation['href']
+  snippet = citation['snippet'] || citation['text']
 
   parts = []
-  parts << title if title
-  parts << url if url
-  parts << "\"#{snippet[0..100]}...\"" if snippet && snippet.length > 10
+  parts << if url
+             "[#{title}](#{url})"
+           else
+             title
+           end
+
+  if snippet && snippet.length > 10
+    # Add a snippet preview if available
+    clean_snippet = snippet.strip.gsub(/\s+/, ' ')[0..100]
+    parts << "\"#{clean_snippet}#{'...' if snippet.length > 100}\""
+  end
 
   parts.join(' - ')
 end

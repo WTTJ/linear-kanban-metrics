@@ -8,7 +8,7 @@ require 'bundler/setup'
 require 'net/http'
 require 'json'
 
-# Citation formatting module
+# Enhanced citation formatting module
 module CitationFormatter
   def display_citations(citations)
     puts '📚 CITATIONS:'
@@ -33,17 +33,81 @@ module CitationFormatter
   end
 
   def format_hash_citation(citation)
-    # Common citation fields in Dust responses
-    title = citation['title'] || citation[:title]
-    url = citation['url'] || citation[:url]
-    snippet = citation['snippet'] || citation[:snippet]
+    # Handle Dust's various citation formats
+    if citation['reference']
+      format_reference_citation(citation)
+    elsif citation['document']
+      format_document_citation(citation)
+    elsif citation['title'] || citation['url']
+      format_basic_citation(citation)
+    else
+      citation.to_s
+    end
+  end
+
+  def format_reference_citation(citation)
+    ref = citation['reference']
+    title = ref['title'] || 'Untitled'
+    url = ref['href']
+
+    if url
+      "[#{title}](#{url})"
+    else
+      title
+    end
+  end
+
+  def format_document_citation(citation)
+    doc = citation['document']
+    title = doc['title'] || doc['name'] || 'Document'
+    url = doc['url'] || doc['href']
+
+    if url
+      "[#{title}](#{url})"
+    else
+      title
+    end
+  end
+
+  def format_basic_citation(citation)
+    title = citation['title'] || citation['name'] || 'Reference'
+    url = citation['url'] || citation['href']
+    snippet = citation['snippet'] || citation['text']
 
     parts = []
-    parts << title if title
-    parts << url if url
-    parts << "\"#{snippet[0..100]}...\"" if snippet && snippet.length > 10
+    parts << if url
+               "[#{title}](#{url})"
+             else
+               title
+             end
+
+    if snippet && snippet.length > 10
+      # Add a snippet preview if available
+      clean_snippet = snippet.strip.gsub(/\s+/, ' ')[0..100]
+      parts << "\"#{clean_snippet}#{'...' if snippet.length > 100}\""
+    end
 
     parts.join(' - ')
+  end
+
+  def process_citation_markers(content, citations)
+    # Create a citation map for lookup
+    citation_map = {}
+    citations.each_with_index do |citation, index|
+      # Dust citations usually have an 'id' field
+      citation_map[citation['id']] = index + 1 if citation.is_a?(Hash) && citation['id']
+    end
+
+    # Replace :cite[id] markers with numbered references [1], [2], etc.
+    content.gsub(/:cite\[([^\]]+)\]/) do |match|
+      cite_id = Regexp.last_match(1)
+      if citation_map[cite_id]
+        "[#{citation_map[cite_id]}]"
+      else
+        # If citation ID not found, keep the original marker but make it more visible
+        "**#{match}**"
+      end
+    end
   end
 end
 
@@ -67,8 +131,11 @@ def load_env_file
 end
 
 # Simple HTTP client for Dust API
+# rubocop:disable Metrics/ClassLength
 class DustAPIClient
   include CitationFormatter
+
+  attr_reader :logger
 
   API_BASE_URL = 'https://dust.tt'
 
@@ -80,7 +147,7 @@ class DustAPIClient
   end
 
   def test_connection
-    @logger.info '🔌 Testing Dust API connection...'
+    logger.info '🔌 Testing Dust API connection...'
 
     prompt = create_test_prompt
     conversation = create_conversation(prompt)
@@ -88,13 +155,13 @@ class DustAPIClient
 
     return handle_failed_conversation_creation unless conversation_id
 
-    @logger.info "✅ Conversation created: #{conversation_id}"
+    logger.info "✅ Conversation created: #{conversation_id}"
     sleep(3) # Wait for processing
 
     response = get_response_with_retries(conversation_id)
     evaluate_test_response(response)
   rescue StandardError => e
-    @logger.error "❌ API test failed: #{e.message}"
+    logger.error "❌ API test failed: #{e.message}"
     false
   end
 
@@ -104,7 +171,7 @@ class DustAPIClient
 
   # rubocop:disable Naming/PredicateMethod
   def handle_failed_conversation_creation
-    @logger.error '❌ Failed to create conversation'
+    logger.error '❌ Failed to create conversation'
     false
   end
 
@@ -127,7 +194,7 @@ class DustAPIClient
   end
 
   def display_successful_response(response)
-    @logger.info '✅ Response received!'
+    logger.info '✅ Response received!'
     puts "\n#{'=' * 60}"
     puts '🤖 DUST AI RESPONSE:'
     puts '=' * 60
@@ -137,8 +204,11 @@ class DustAPIClient
     content = response[:content] || response['content']
     citations = response[:citations] || response['citations'] || []
 
+    # Process citation markers in content
+    processed_content = citations.any? ? process_citation_markers(content, citations) : content
+
     # Display the main content
-    puts content
+    puts processed_content
     puts
 
     # Display citations if present
@@ -146,20 +216,21 @@ class DustAPIClient
 
     puts '=' * 60
     puts "📏 Response length: #{content.length} characters"
+    puts "📏 Processed length: #{processed_content.length} characters"
     puts "📚 Citations found: #{citations.length}" if citations.any?
   end
 
   def handle_response_failure(response)
-    @logger.error '❌ No response received from agent'
+    logger.error '❌ No response received from agent'
 
     case response
     when Hash
       content = response[:content] || response['content']
-      @logger.error "Response content: #{content}" if content
+      logger.error "Response content: #{content}" if content
     when String
-      @logger.error "Response content: #{response}"
+      logger.error "Response content: #{response}"
     else
-      @logger.error "Unexpected response type: #{response.class}"
+      logger.error "Unexpected response type: #{response.class}"
     end
   end
 
@@ -186,9 +257,9 @@ class DustAPIClient
       streamGenerationEvents: false
     }.to_json
 
-    @logger.debug '📤 Creating conversation...'
+    logger.debug '📤 Creating conversation...'
     response = make_request(uri, :post, headers, body)
-    @logger.debug "📥 Conversation response: #{response.keys}" if response.is_a?(Hash)
+    logger.debug "📥 Conversation response: #{response.keys}" if response.is_a?(Hash)
     response
   end
 
@@ -196,10 +267,10 @@ class DustAPIClient
     uri = URI("#{API_BASE_URL}/api/v1/w/#{@workspace_id}/assistant/conversations/#{conversation_id}")
     headers = { 'Authorization' => "Bearer #{@api_key}" }
 
-    @logger.debug "📤 Fetching conversation: #{conversation_id}"
+    logger.debug "📤 Fetching conversation: #{conversation_id}"
     response = make_request(uri, :get, headers)
 
-    @logger.debug "Full Dust API response: #{response.inspect}"
+    logger.debug "Full Dust API response: #{response.inspect}"
 
     messages = extract_messages(response)
     return nil if messages.nil? || messages.empty?
@@ -210,11 +281,11 @@ class DustAPIClient
   def extract_messages(response)
     messages = response.dig('conversation', 'content')
     if messages.nil? || messages.empty?
-      @logger.debug "No conversation content found. API response keys: #{response.keys}"
+      logger.debug "No conversation content found. API response keys: #{response.keys}"
       return nil
     end
 
-    @logger.debug "Found #{messages.length} messages in conversation"
+    logger.debug "Found #{messages.length} messages in conversation"
     messages
   end
 
@@ -222,10 +293,10 @@ class DustAPIClient
     all_messages = messages.is_a?(Array) ? messages.flatten : [messages]
     agent_messages = all_messages.select { |msg| msg&.dig('type') == 'agent_message' }
 
-    @logger.debug "Found #{agent_messages.length} agent messages"
+    logger.debug "Found #{agent_messages.length} agent messages"
 
     if agent_messages.empty?
-      @logger.debug "No agent messages found. All message types: #{all_messages.filter_map { |m| m&.dig('type') }.uniq}"
+      logger.debug "No agent messages found. All message types: #{all_messages.filter_map { |m| m&.dig('type') }.uniq}"
       return nil
     end
 
@@ -236,8 +307,8 @@ class DustAPIClient
     content = message&.dig('content')
     citations = message&.dig('citations') || []
 
-    @logger.debug "Latest agent message content: #{content&.slice(0, 100)}..." if content
-    @logger.debug "Found #{citations.length} citations" if citations.any?
+    logger.debug "Latest agent message content: #{content&.slice(0, 100)}..." if content
+    logger.debug "Found #{citations.length} citations" if citations.any?
 
     # Return both content and citations
     {
@@ -262,17 +333,17 @@ class DustAPIClient
   end
 
   def attempt_get_response(conversation_id, retries, max_retries)
-    @logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
+    logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
     response = get_response(conversation_id)
 
     if response_has_content?(response)
-      @logger.debug 'Received valid response with content'
+      logger.debug 'Received valid response with content'
       return response
     end
 
     response
   rescue StandardError => e
-    @logger.error "Error fetching response (attempt #{retries + 1}): #{e.message}"
+    logger.error "Error fetching response (attempt #{retries + 1}): #{e.message}"
     sleep(2) if retries < max_retries - 1
     nil
   end
@@ -281,12 +352,12 @@ class DustAPIClient
     return unless retries < max_retries - 1
 
     wait_time = (retries + 1) * 3 # Progressive backoff: 3s, 6s, 9s
-    @logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
+    logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
     sleep(wait_time)
   end
 
   def create_no_response_result(max_retries)
-    @logger.error "Agent did not respond after #{max_retries} attempts"
+    logger.error "Agent did not respond after #{max_retries} attempts"
     {
       content: 'Dust agent did not respond after multiple attempts. The agent may be busy or misconfigured.',
       citations: []
@@ -321,16 +392,17 @@ class DustAPIClient
 
     unless response.code == '200'
       error_msg = "HTTP #{response.code}: #{response.body}"
-      @logger.error error_msg
+      logger.error error_msg
       raise StandardError, error_msg
     end
 
     JSON.parse(response.body)
   rescue JSON::ParserError => e
-    @logger.error "Failed to parse response: #{e.message}"
+    logger.error "Failed to parse response: #{e.message}"
     raise StandardError, "Invalid JSON response: #{e.message}"
   end
 end
+# rubocop:enable Metrics/ClassLength
 
 # Simple logger
 class SimpleLogger
