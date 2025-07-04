@@ -25,7 +25,7 @@ if ENV['COVERAGE']
 end
 
 # Load environment variables for testing
-Dotenv.load('config/.env.test')
+Dotenv.load('config/.env')
 
 # Load the main library
 require_relative '../lib/kanban_metrics'
