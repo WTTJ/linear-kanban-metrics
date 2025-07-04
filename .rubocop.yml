@@ -20,8 +20,6 @@ AllCops:
     - '**/*.txt'
     - '**/*.yaml'
     - '**/*.yml'
-    - 'kanban_metrics_original.rb'
-    - 'kanban_metrics.backup.rb'
     - 'spec/scripts/**/*'
     - 'spec/vcr_cassettes/**/*'
     - 'tmp/**/*'
@@ -97,11 +95,6 @@ Naming/AccessorMethodName:
 
 Naming/VariableNumber:
   Enabled: false
-
-# Lint cops
-Lint/ScriptPermission:
-  Exclude:
-    - '.circleci/scripts/ci_logger.rb'  # Library file, not executable script
 
 # RSpec specific
 RSpec/ExampleLength:
