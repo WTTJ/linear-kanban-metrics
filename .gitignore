@@ -1,7 +1,6 @@
 .bundle/
 .DS_Store
 config/.env
-config/.env.test
 coverage/
 reports/
 tmp/
