@@ -1,0 +1,74 @@
+name: 🤖 Smart Test Runner
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  smart-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 💎 Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3.5'
+          bundler-cache: true
+
+      - name: 📦 Install dependencies
+        run: |
+          bundle config set --local path 'vendor/bundle'
+          bundle install --jobs 4 --retry 3
+
+      - name: 🧠 Analyze Changes and Select Tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          API_PROVIDER: ${{ vars.API_PROVIDER || 'dust' }}
+          DUST_AGENT_ID: ${{ vars.DUST_AGENT_ID }}
+          DUST_API_KEY: ${{ secrets.DUST_API_KEY }}
+          DUST_WORKSPACE_ID: ${{ vars.DUST_WORKSPACE_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          COMMIT_SHA: ${{ github.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref || github.event.before }}
+        run: |
+          echo "🔍 Analyzing code changes..."
+          bundle exec ruby .github/scripts/smart_test_runner.rb
+
+      - name: 🧪 Run Selected Tests
+        run: |
+          if [ -f tmp/selected_tests.txt ]; then
+            echo "📋 Running selected tests:"
+            cat tmp/selected_tests.txt
+            echo ""
+            
+            # Read test files and run them
+            while IFS= read -r test_file; do
+              if [ -f "$test_file" ]; then
+                echo "🧪 Running: $test_file"
+                bundle exec rspec "$test_file" --format documentation
+              else
+                echo "⚠️  Test file not found: $test_file"
+              fi
+            done < tmp/selected_tests.txt
+          else
+            echo "🚫 No specific tests selected, running full suite as fallback"
+            bundle exec rspec --format documentation
+          fi
+
+      - name: 📊 Upload Test Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: smart-test-results
+          path: |
+            tmp/selected_tests.txt
+            tmp/test_analysis.json
+            tmp/ai_analysis.md
