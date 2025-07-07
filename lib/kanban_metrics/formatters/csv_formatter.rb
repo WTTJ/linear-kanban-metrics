@@ -206,7 +206,7 @@ module KanbanMetrics
           safe_fetch_nested(team_stats, :cycle_time, :median),
           safe_fetch_nested(team_stats, :lead_time, :average),
           safe_fetch_nested(team_stats, :lead_time, :median),
-          safe_fetch_nested(team_stats, :throughput)
+          extract_throughput_value(team_stats)
         ].map { |value| format_metric_value(value) }
       rescue StandardError => e
         log_warning("Failed to add team row for '#{team_name}': #{e.message}")
@@ -320,6 +320,20 @@ module KanbanMetrics
       rescue StandardError => e
         log_warning("Failed to add ticket row: #{e.message}")
         csv << (['Error', 'N/A'] + (['N/A'] * 14))
+      end
+
+      # Extract throughput value from team statistics
+      #
+      # @param team_stats [Hash] Team statistics
+      # @return [Numeric, nil] Throughput value or nil
+      def extract_throughput_value(team_stats)
+        throughput_data = safe_fetch_nested(team_stats, :throughput)
+
+        # If throughput is a hash with weekly_avg and total_completed, prefer total_completed
+        return throughput_data[:total_completed] || throughput_data[:weekly_avg] if throughput_data.is_a?(Hash)
+
+        # If throughput is a direct numeric value
+        throughput_data
       end
 
       # Data conversion and formatting utilities
