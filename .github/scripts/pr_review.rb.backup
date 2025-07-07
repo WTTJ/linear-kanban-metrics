@@ -508,6 +508,179 @@ module DustResponseProcessor
   end
 end
 
+# Dust AI provider
+class DustProvider < AIProvider
+  include DustResponseProcessor
+  API_BASE_URL = 'https://dust.tt'
+
+  attr_reader :config, :http_client, :logger
+
+  def initialize(config, http_client, logger)
+    super()
+    @config = config
+    @http_client = http_client
+    @logger = logger
+  end
+
+  def request_review(prompt)
+    logger.info 'Requesting review from Dust AI...'
+
+    conversation = create_conversation(prompt)
+    conversation_id = conversation.dig('conversation', 'sId')
+
+    if conversation_id.nil?
+      logger.error "Failed to create Dust conversation. Response: #{conversation.inspect}"
+      return 'Failed to create Dust conversation. Please check your configuration and try again.'
+    end
+
+    logger.debug "Created Dust conversation: #{conversation_id}"
+
+    # Give the agent more time to process before fetching response
+    # GitHub Actions might need longer due to network latency
+    initial_wait = ENV['GITHUB_ACTIONS'] ? 8 : 3
+    logger.debug "Waiting #{initial_wait} seconds for agent to process..."
+    sleep(initial_wait)
+
+    get_response_with_retries(conversation_id)
+  end
+
+  def provider_name
+    'Dust AI'
+  end
+
+  private
+
+  def create_conversation(prompt)
+    uri = URI("#{API_BASE_URL}/api/v1/w/#{config.dust_workspace_id}/assistant/conversations")
+    headers = {
+      'Authorization' => "Bearer #{config.dust_api_key}",
+      'Content-Type' => 'application/json'
+    }
+
+    # Try alternative mention format - sometimes helps with agent triggering
+    body = {
+      message: {
+        content: prompt,
+        context: {
+          timezone: 'UTC',
+          username: 'github-pr-reviewer',
+          fullName: 'GitHub PR Reviewer',
+          origin: 'api'
+        },
+        mentions: [{ configurationId: config.dust_agent_id }]
+      },
+      blocking: true,
+      streamGenerationEvents: false
+    }.to_json
+
+    logger.debug "Creating Dust conversation with prompt length: #{prompt.length} chars"
+    logger.debug "Agent ID: '#{config.dust_agent_id}' (length: #{config.dust_agent_id&.length})"
+    logger.debug "Mentions array: [{ configurationId: '#{config.dust_agent_id}' }]"
+    http_client.post(uri, headers, body)
+  end
+
+  def get_response(conversation_id)
+    uri = URI("#{API_BASE_URL}/api/v1/w/#{config.dust_workspace_id}/assistant/conversations/#{conversation_id}")
+    headers = { 'Authorization' => "Bearer #{config.dust_api_key}" }
+
+    logger.debug "Fetching Dust conversation: #{conversation_id}"
+    response = http_client.get(uri, headers)
+    extract_content(response)
+  end
+
+  def get_response_with_retries(conversation_id, max_retries = 5)
+    retries = 0
+
+    while retries < max_retries
+      response = attempt_fetch_response(conversation_id, retries, max_retries)
+
+      logger.debug "Response validation - length: #{response.length}, starts with: '#{response[0..50]}...'"
+
+      if response_is_valid?(response)
+        logger.debug 'Response validated successfully, returning content'
+        return response
+      end
+
+      logger.debug "Response not valid, will retry. Response: '#{response[0..100]}...'"
+      handle_retry_delay(retries, max_retries)
+      retries += 1
+    end
+
+    logger.error "Agent did not respond after #{max_retries} attempts with longer timeouts"
+    create_fallback_message(conversation_id)
+  end
+
+  def attempt_fetch_response(conversation_id, retries, max_retries)
+    logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
+    get_response(conversation_id)
+  rescue StandardError => e
+    logger.warn "Error fetching response (attempt #{retries + 1}): #{e.message}"
+    raise e if retries >= max_retries - 1
+
+    sleep(3)
+    'retry_needed'
+  end
+
+  def response_is_valid?(response)
+    # Handle nil responses first
+    return false if response.nil?
+
+    # Check if response is specifically a retry signal
+    return false if response == 'retry_needed'
+
+    # Check if response is specifically an error message (exact matches)
+    return false if response.start_with?('Dust agent did not respond.')
+    return false if response.start_with?('Dust agent returned an empty response.')
+    return false if response.start_with?('Dust did not return a conversation.')
+    return false if response.start_with?('Failed to create Dust conversation.')
+
+    # Check for empty or whitespace-only responses
+    return false if response.strip.empty?
+
+    # Since we now check status="succeeded" in extract_final_content_with_citations,
+    # we can be less strict here and trust that valid content made it through
+    logger.debug "Response validated as valid: length=#{response.length}, content='#{response[0..50]}...'"
+    true
+  end
+
+  def handle_retry_delay(retries, max_retries)
+    return unless retries < max_retries - 1
+
+    wait_time = (retries + 1) * 5 # Longer wait: 5s, 10s, 15s, 20s
+    logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
+    sleep(wait_time)
+  end
+
+  def create_fallback_message(conversation_id)
+    <<~FALLBACK
+      ## PR Review Status
+
+      ⚠️ **Dust AI agent did not respond after multiple attempts**
+
+      This may be due to:
+      - Agent being busy with other requests
+      - Network timeout in CI/CD environment
+      - Large prompt requiring more processing time
+      - Agent configuration issues (check mentions array)
+
+      **Suggested Actions:**
+      1. Re-run the workflow in a few minutes
+      2. Check agent status in Dust dashboard: https://dust.tt/w/#{config.dust_workspace_id}/assistant/#{conversation_id}
+      3. Verify agent ID has no trailing whitespace
+      4. Consider using the Anthropic provider as fallback
+
+      **Debug Information:**
+      - Conversation ID: #{conversation_id}
+      - Workspace: #{config.dust_workspace_id}
+      - Agent: '#{config.dust_agent_id}' (length: #{config.dust_agent_id&.length})
+      - Timestamp: #{Time.now}
+
+      The conversation was created successfully but the agent did not generate a response within the timeout period.
+      Check the conversation in Dust dashboard for more details.
+    FALLBACK
+  end
+end
+
 # GitHub comment service
 class GitHubCommentService
   attr_reader :github_client, :logger
@@ -550,7 +723,7 @@ class PullRequestReviewer
   def initialize(config = nil, dependencies = {})
     @config = config || ReviewerConfig.new
     @logger = dependencies[:logger] || SharedLoggerFactory.create
-    @github_client = dependencies[:github_client] || create_github_client(@config)
+    @github_client = dependencies[:github_client] || GitHubClientFactory.create(@config)
     @http_client = dependencies[:http_client] || HTTPClient.new(@logger)
     @file_reader = dependencies[:file_reader] || SecureFileReader.new(@logger)
     @data_gatherer = dependencies[:data_gatherer] || ReviewDataGatherer.new(@file_reader, @github_client, @logger)
@@ -584,14 +757,6 @@ class PullRequestReviewer
 
     logger.error "Configuration validation failed: #{config.errors.join(', ')}"
     raise ArgumentError, "Invalid configuration: #{config.errors.join(', ')}"
-  end
-
-  def create_github_client(config, timeouts = {})
-    client = Octokit::Client.new(access_token: config.github_token)
-    github_timeout = timeouts[:github_timeout] || 15
-    http_timeout = timeouts[:http_timeout] || 30
-    client.connection_options[:request] = { timeout: github_timeout, open_timeout: http_timeout }
-    client
   end
 end
 

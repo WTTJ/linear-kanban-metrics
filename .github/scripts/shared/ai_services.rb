@@ -230,6 +230,8 @@ class DustProvider < AIProvider
     end
 
     logger.info "✅ Created Dust conversation: #{conversation_id}"
+    conversation_uri = "#{API_BASE_URL}/api/v1/w/#{workspace_id}/assistant/conversations/#{conversation_id}"
+    logger.info "🔗 Conversation URI: #{conversation_uri}"
 
     # Give the agent more time to process before fetching response
     initial_wait = ENV['GITHUB_ACTIONS'] ? 8 : 3
@@ -298,6 +300,8 @@ class DustProvider < AIProvider
     end
 
     logger.error "❌ Dust agent did not respond after #{max_retries} attempts (conversation: #{conversation_id})"
+    conversation_uri = "#{API_BASE_URL}/api/v1/w/#{workspace_id}/assistant/conversations/#{conversation_id}"
+    logger.error "🔗 Check conversation status at: #{conversation_uri}"
     nil
   end
 
