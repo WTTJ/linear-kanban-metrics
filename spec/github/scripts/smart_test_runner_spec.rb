@@ -236,7 +236,7 @@ RSpec.describe SmartTestRunner do
 
       context 'when AI provider creation fails' do
         let(:selector_with_failed_provider) { described_class.new(config, mock_logger) }
-        
+
         before do
           allow(AIProviderFactory).to receive(:create).and_raise(StandardError, 'Provider creation failed')
         end
