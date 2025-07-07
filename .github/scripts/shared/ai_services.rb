@@ -229,11 +229,11 @@ class DustProvider < AIProvider
       return nil
     end
 
-    logger.debug "Created Dust conversation: #{conversation_id}"
+    logger.info "✅ Created Dust conversation: #{conversation_id}"
 
     # Give the agent more time to process before fetching response
     initial_wait = ENV['GITHUB_ACTIONS'] ? 8 : 3
-    logger.debug "Waiting #{initial_wait} seconds for agent to process..."
+    logger.info "⏳ Waiting #{initial_wait} seconds for agent to process..."
     sleep(initial_wait)
 
     get_response_with_retries(conversation_id)
@@ -276,7 +276,7 @@ class DustProvider < AIProvider
     uri = URI("#{API_BASE_URL}/api/v1/w/#{workspace_id}/assistant/conversations/#{conversation_id}")
     headers = { 'Authorization' => "Bearer #{api_key}" }
 
-    logger.debug "Fetching Dust conversation: #{conversation_id}"
+    logger.info "🔍 Fetching Dust conversation response: #{conversation_id}"
     response = http_client.get(uri, headers)
     extract_content(response)
   end
@@ -288,24 +288,24 @@ class DustProvider < AIProvider
       response = attempt_fetch_response(conversation_id, retries, max_retries)
 
       if response_is_valid?(response)
-        logger.debug 'Response validated successfully, returning content'
+        logger.info "✅ Response validated successfully for conversation: #{conversation_id}"
         return response
       end
 
-      logger.debug "Response not valid, will retry. Response: '#{response.to_s[0..100]}...'"
-      handle_retry_delay(retries, max_retries)
+      logger.info "⏳ Response not valid, will retry. Response: '#{response.to_s[0..100]}...'"
+      handle_retry_delay(retries, max_retries, conversation_id)
       retries += 1
     end
 
-    logger.error "Agent did not respond after #{max_retries} attempts with longer timeouts"
+    logger.error "❌ Dust agent did not respond after #{max_retries} attempts (conversation: #{conversation_id})"
     nil
   end
 
   def attempt_fetch_response(conversation_id, retries, max_retries)
-    logger.debug "Attempting to fetch response (attempt #{retries + 1}/#{max_retries})"
+    logger.info "🔄 Attempting to fetch response (attempt #{retries + 1}/#{max_retries}) for conversation: #{conversation_id}"
     get_response(conversation_id)
   rescue StandardError => e
-    logger.warn "Error fetching response (attempt #{retries + 1}): #{e.message}"
+    logger.warn "⚠️ Error fetching response (attempt #{retries + 1}) for conversation #{conversation_id}: #{e.message}"
     raise e if retries >= max_retries - 1
 
     sleep(3)
@@ -321,11 +321,11 @@ class DustProvider < AIProvider
     true
   end
 
-  def handle_retry_delay(retries, max_retries)
+  def handle_retry_delay(retries, max_retries, conversation_id)
     return unless retries < max_retries - 1
 
     wait_time = (retries + 1) * 5 # 5s, 10s, 15s, 20s
-    logger.debug "Agent hasn't responded yet, waiting #{wait_time} seconds before retry..."
+    logger.info "⏳ Agent hasn't responded yet, waiting #{wait_time} seconds before retry (conversation: #{conversation_id})..."
     sleep(wait_time)
   end
 end
