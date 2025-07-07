@@ -8,6 +8,7 @@ require 'octokit'
 require 'logger'
 require 'fileutils'
 require 'pathname'
+require_relative 'shared/ai_services'
 
 # Configuration for the smart test runner
 class SmartTestConfig
@@ -278,23 +279,42 @@ end
 
 # AI service for intelligent test selection
 class AITestSelector
-  attr_reader :config, :logger
+  attr_reader :config, :logger, :ai_provider
 
   def initialize(config, logger)
     @config = config
     @logger = logger
+    @ai_provider = create_ai_provider
   end
 
   def select_tests(changes, test_discovery)
     logger.info '🤖 Using AI to select relevant tests...'
 
+    if ai_provider.nil?
+      logger.warn 'AI provider not available, using fallback'
+      return generate_fallback_selection(test_discovery[:test_files])
+    end
+
     prompt = build_analysis_prompt(changes, test_discovery)
-    ai_response = call_ai_service(prompt)
+    ai_response = ai_provider.make_request(prompt)
+
+    if ai_response.nil?
+      logger.warn 'AI service returned no response, using fallback'
+      return generate_fallback_selection(test_discovery[:test_files])
+    end
 
     parse_ai_response(ai_response, test_discovery[:test_files])
   end
 
   private
+
+  def create_ai_provider
+    http_client = HTTPClient.new(logger)
+    AIProviderFactory.create(config, http_client, logger)
+  rescue StandardError => e
+    logger.error "Failed to create AI provider: #{e.message}"
+    nil
+  end
 
   def build_analysis_prompt(changes, test_discovery)
     changed_files_summary = changes[:changed_files].map do |file|
@@ -369,71 +389,21 @@ class AITestSelector
     end.join("\n")
   end
 
-  def call_ai_service(prompt)
-    if config.anthropic?
-      call_anthropic_api(prompt)
-    elsif config.dust?
-      call_dust_api(prompt)
-    else
-      raise "Unsupported AI provider: #{config.api_provider}"
-    end
-  end
-
-  def call_anthropic_api(prompt)
-    uri = URI('https://api.anthropic.com/v1/messages')
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = true
-
-    request = Net::HTTP::Post.new(uri)
-    request['Content-Type'] = 'application/json'
-    request['x-api-key'] = config.anthropic_api_key
-    request['anthropic-version'] = '2023-06-01'
-
-    request.body = {
-      model: 'claude-3-sonnet-20240229',
-      max_tokens: 4000,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
-        }
-      ]
-    }.to_json
-
-    response = http.request(request)
-
-    if response.code == '200'
-      JSON.parse(response.body)['content'][0]['text']
-    else
-      logger.error "Anthropic API error: #{response.code} - #{response.body}"
-      generate_fallback_response
-    end
-  rescue StandardError => e
-    logger.error "Error calling Anthropic API: #{e.message}"
-    generate_fallback_response
-  end
-
-  def call_dust_api(_prompt)
-    # Implementation for Dust API (if you're using it)
-    # This would be similar to the existing PR review implementation
-    logger.warn 'Dust API not implemented for test selection, using fallback'
-    generate_fallback_response
-  end
-
-  def generate_fallback_response
-    # Fallback to running all tests if AI fails
+  def generate_fallback_selection(available_tests)
     {
-      'selected_tests' => Dir.glob('spec/**/*_spec.rb'),
-      'reasoning' => {
+      selected_tests: available_tests,
+      reasoning: {
         'direct_tests' => [],
         'indirect_tests' => [],
         'risk_level' => 'high',
         'explanation' => 'AI analysis failed, running all tests as fallback'
       }
-    }.to_json
+    }
   end
 
   def parse_ai_response(ai_response, available_tests)
+    return generate_fallback_selection(available_tests) if ai_response.nil?
+
     # Extract JSON from AI response
     json_match = ai_response.match(/```json\s*(.*?)\s*```/m)
     json_content = json_match ? json_match[1] : ai_response
@@ -459,13 +429,7 @@ class AITestSelector
     logger.debug "AI response was: #{ai_response}"
 
     # Fallback to all tests
-    {
-      selected_tests: available_tests,
-      reasoning: {
-        'risk_level' => 'high',
-        'explanation' => 'Could not parse AI response, running all tests'
-      }
-    }
+    generate_fallback_selection(available_tests)
   end
 end
 
@@ -475,7 +439,7 @@ class SmartTestRunner
 
   def initialize(config = nil, logger = nil)
     @config = config || SmartTestConfig.new
-    @logger = logger || Logger.new($stdout, level: Logger::INFO)
+    @logger = logger || SharedLoggerFactory.create
     setup_output_directory
   end
 

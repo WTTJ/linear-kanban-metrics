@@ -5,6 +5,7 @@
 # This script demonstrates how to use the smart test runner locally
 
 require_relative '../.github/scripts/smart_test_runner'
+require_relative '../.github/scripts/shared/ai_services'
 require 'logger'
 
 puts '🧪 Smart Test Runner - Local Test'
@@ -25,8 +26,7 @@ test_env.each { |k, v| puts "  #{k}: #{v}" }
 puts
 
 # Create a test logger that outputs to console
-logger = Logger.new($stdout)
-logger.level = Logger::INFO
+logger = SharedLoggerFactory.create
 
 # Initialize services
 config = SmartTestConfig.new(test_env)

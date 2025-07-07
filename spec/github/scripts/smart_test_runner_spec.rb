@@ -4,13 +4,14 @@ require 'spec_helper'
 
 # Load the smart test runner from the correct path
 require File.expand_path('../../../.github/scripts/smart_test_runner', __dir__)
+require File.expand_path('../../../.github/scripts/shared/ai_services', __dir__)
 
 RSpec.describe SmartTestRunner do
   let(:mock_logger) { instance_double(Logger) }
   let(:mock_config) { instance_double(SmartTestConfig) }
 
   before do
-    allow(Logger).to receive(:new).and_return(mock_logger)
+    allow(SharedLoggerFactory).to receive(:create).and_return(mock_logger)
     allow(mock_logger).to receive(:info)
     allow(mock_logger).to receive(:warn)
     allow(mock_logger).to receive(:error)
@@ -161,6 +162,7 @@ RSpec.describe SmartTestRunner do
       instance_double(SmartTestConfig,
                       anthropic?: true,
                       dust?: false,
+                      api_provider: 'anthropic',
                       anthropic_api_key: 'test_key')
     end
     let(:changes) do
@@ -181,6 +183,13 @@ RSpec.describe SmartTestRunner do
         test_mapping: { 'spec/lib/example_spec.rb' => ['lib/example.rb'] }
       }
     end
+    let(:mock_ai_provider) { instance_double(AnthropicProvider) }
+
+    before do
+      allow(HTTPClient).to receive(:new).and_return(instance_double(HTTPClient))
+      allow(AIProviderFactory).to receive(:create).and_return(mock_ai_provider)
+      allow(selector).to receive(:load_prompt_template).and_return('Test prompt with {{changed_files_summary}} placeholder')
+    end
 
     describe '#select_tests' do
       let(:ai_response) do
@@ -199,15 +208,45 @@ RSpec.describe SmartTestRunner do
         JSON
       end
 
-      before do
-        allow(selector).to receive_messages(call_anthropic_api: ai_response, load_prompt_template: 'Test prompt with {{changed_files_summary}} placeholder')
+      context 'when AI provider responds successfully' do
+        before do
+          allow(mock_ai_provider).to receive(:make_request).and_return(ai_response)
+        end
+
+        it 'selects relevant tests using AI' do
+          result = selector.select_tests(changes, test_discovery)
+
+          expect(result[:selected_tests]).to eq(['spec/lib/example_spec.rb'])
+          expect(result[:reasoning]['risk_level']).to eq('low')
+        end
       end
 
-      it 'selects relevant tests using AI' do
-        result = selector.select_tests(changes, test_discovery)
+      context 'when AI provider returns nil' do
+        before do
+          allow(mock_ai_provider).to receive(:make_request).and_return(nil)
+        end
 
-        expect(result[:selected_tests]).to eq(['spec/lib/example_spec.rb'])
-        expect(result[:reasoning]['risk_level']).to eq('low')
+        it 'falls back to running all tests' do
+          result = selector.select_tests(changes, test_discovery)
+
+          expect(result[:selected_tests]).to eq(['spec/lib/example_spec.rb'])
+          expect(result[:reasoning]['risk_level']).to eq('high')
+        end
+      end
+
+      context 'when AI provider creation fails' do
+        let(:selector_with_failed_provider) { described_class.new(config, mock_logger) }
+        
+        before do
+          allow(AIProviderFactory).to receive(:create).and_raise(StandardError, 'Provider creation failed')
+        end
+
+        it 'falls back to running all tests' do
+          result = selector_with_failed_provider.select_tests(changes, test_discovery)
+
+          expect(result[:selected_tests]).to eq(['spec/lib/example_spec.rb'])
+          expect(result[:reasoning]['risk_level']).to eq('high')
+        end
       end
     end
 
