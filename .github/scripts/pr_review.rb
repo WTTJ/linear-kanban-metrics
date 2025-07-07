@@ -567,7 +567,7 @@ class PullRequestReviewer
 
     review_data = data_gatherer.gather_data(config)
     prompt = prompt_builder.build_prompt(review_data)
-    ai_response = ai_provider.request_review(prompt)
+    ai_response = ai_provider.make_request(prompt)
     comment_service.post_comment(config, ai_response, ai_provider.provider_name)
 
     logger.info 'PR review completed successfully'

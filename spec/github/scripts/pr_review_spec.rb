@@ -366,7 +366,7 @@ RSpec.describe 'PR Review Refactored' do
 
       allow(dependencies[:data_gatherer]).to receive(:gather_data).and_return({})
       allow(dependencies[:prompt_builder]).to receive(:build_prompt).and_return('prompt')
-      allow(dependencies[:ai_provider]).to receive_messages(request_review: 'review', provider_name: 'AI Provider')
+      allow(dependencies[:ai_provider]).to receive_messages(make_request: 'review', provider_name: 'AI Provider')
       expect(dependencies[:comment_service]).to receive(:post_comment)
 
       reviewer.run
