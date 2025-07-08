@@ -1,4 +1,4 @@
-# Smart Test Selection AI Prompt
+# AI Test Runner Prompt
 
 You are an expert Ruby developer analyzing code changes to determine which tests should be run.
 
