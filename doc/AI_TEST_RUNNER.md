@@ -230,7 +230,7 @@ bundle exec rspec
 
 ### Improving AI Prompts
 
-The AI prompt is defined in `.github/scripts/ai_test_selection_prompt.md` as an external template file. This allows for:
+The AI prompt is defined in `.github/scripts/ai_test_runner_prompt.md` as an external template file. This allows for:
 
 - **Easy maintenance**: Update prompts without touching Ruby code
 - **Version control**: Track prompt changes separately
@@ -255,7 +255,7 @@ AITestRunner
 ├── GitChangeAnalyzer        # Git diff analysis and parsing
 ├── TestDiscoveryService     # Test file discovery and mapping
 ├── AITestSelector          # AI-powered test selection
-│   └── ai_test_selection_prompt.md  # External AI prompt template
+│   └── ai_test_runner_prompt.md  # External AI prompt template
 └── AITestRunner            # Main orchestrator
 ```
 

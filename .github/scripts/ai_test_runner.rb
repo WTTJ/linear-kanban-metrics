@@ -506,7 +506,7 @@ class AITestSelector
   end
 
   def load_prompt_template
-    prompt_file = File.join(File.dirname(__FILE__), 'ai_test_selection_prompt.md')
+    prompt_file = File.join(File.dirname(__FILE__), 'ai_test_runner_prompt.md')
 
     if File.exist?(prompt_file)
       File.read(prompt_file)
