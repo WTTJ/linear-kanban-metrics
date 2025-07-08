@@ -61,8 +61,8 @@ export BASE_REF=main
 export GITHUB_TOKEN=your_github_token
 export ANTHROPIC_API_KEY=your_anthropic_key
 
-# Run the smart test selector
-bundle exec ruby .github/scripts/smart_test_runner.rb
+# Run the AI test selector
+bundle exec ruby .github/scripts/ai_test_runner.rb
 
 # Check selected tests
 cat tmp/selected_tests.txt
@@ -214,8 +214,8 @@ runner = SmartTestRunner.new(config, logger)
 ### Running Tests
 
 ```bash
-# Run the smart test runner tests
-bundle exec rspec spec/github/scripts/smart_test_runner_spec.rb
+# Run the AI test runner tests
+bundle exec rspec spec/github/scripts/ai_test_runner_spec.rb
 
 # Run all tests
 bundle exec rspec
@@ -223,14 +223,14 @@ bundle exec rspec
 
 ### Adding New Features
 
-1. Add your feature to the appropriate class in `smart_test_runner.rb`
-2. Add corresponding tests in `spec/github/scripts/smart_test_runner_spec.rb`
+1. Add your feature to the appropriate class in `ai_test_runner.rb`
+2. Add corresponding tests in `spec/github/scripts/ai_test_runner_spec.rb`
 3. Update this README if needed
 4. Test with real changes to ensure AI selection works correctly
 
 ### Improving AI Prompts
 
-The AI prompt is defined in `.github/scripts/smart_test_selection_prompt.md` as an external template file. This allows for:
+The AI prompt is defined in `.github/scripts/ai_test_selection_prompt.md` as an external template file. This allows for:
 
 - **Easy maintenance**: Update prompts without touching Ruby code
 - **Version control**: Track prompt changes separately
@@ -255,7 +255,7 @@ SmartTestRunner
 ├── GitChangeAnalyzer        # Git diff analysis and parsing
 ├── TestDiscoveryService     # Test file discovery and mapping
 ├── AITestSelector          # AI-powered test selection
-│   └── smart_test_selection_prompt.md  # External AI prompt template
+│   └── ai_test_selection_prompt.md  # External AI prompt template
 └── SmartTestRunner         # Main orchestrator
 ```
 

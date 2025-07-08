@@ -259,8 +259,8 @@ class DustProvider < AIProvider
         content: prompt,
         context: {
           timezone: 'UTC',
-          username: 'github-smart-test-runner',
-          fullName: 'GitHub Smart Test Runner',
+          username: 'github-ai-test-runner',
+          fullName: 'GitHub AI Test Runner',
           origin: 'api'
         },
         mentions: [{ configurationId: agent_id }]

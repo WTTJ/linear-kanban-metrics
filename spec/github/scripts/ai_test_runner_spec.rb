@@ -2,13 +2,13 @@
 
 require 'spec_helper'
 
-# Load the smart test runner from the correct path
-require File.expand_path('../../../.github/scripts/smart_test_runner', __dir__)
+# Load the AI test runner from the correct path
+require File.expand_path('../../../.github/scripts/ai_test_runner', __dir__)
 require File.expand_path('../../../.github/scripts/shared/ai_services', __dir__)
 
-RSpec.describe SmartTestRunner do
+RSpec.describe AITestRunner do
   let(:mock_logger) { instance_double(Logger) }
-  let(:mock_config) { instance_double(SmartTestConfig) }
+  let(:mock_config) { instance_double(AITestConfig) }
 
   before do
     allow(SharedLoggerFactory).to receive(:create).and_return(mock_logger)
@@ -19,7 +19,7 @@ RSpec.describe SmartTestRunner do
     allow(FileUtils).to receive(:mkdir_p)
   end
 
-  describe SmartTestConfig do
+  describe AITestConfig do
     subject(:config) { described_class.new(env_vars) }
 
     let(:env_vars) do
@@ -80,7 +80,7 @@ RSpec.describe SmartTestRunner do
 
     describe '#analyze_changes' do
       let(:config) do
-        instance_double(SmartTestConfig,
+        instance_double(AITestConfig,
                         pr_mode?: false,
                         base_ref: 'main',
                         commit_sha: 'abc123')
@@ -100,7 +100,14 @@ RSpec.describe SmartTestRunner do
       end
 
       before do
-        allow(analyzer).to receive(:`).with('git diff --no-color main...abc123').and_return(sample_diff)
+        # Mock Open3.capture3 with the new git command format
+        allow(Open3).to receive(:capture3).with(
+          'git', 'diff', '--no-color', '--no-renames', '--diff-filter=ACMRT', '--stat=1000', 'main...abc123'
+        ).and_return([
+                       sample_diff,
+                       '',
+                       double('status', success?: true)
+                     ])
       end
 
       it 'analyzes git changes successfully' do
@@ -159,7 +166,7 @@ RSpec.describe SmartTestRunner do
     subject(:selector) { described_class.new(config, mock_logger) }
 
     let(:config) do
-      instance_double(SmartTestConfig,
+      instance_double(AITestConfig,
                       anthropic?: true,
                       dust?: false,
                       api_provider: 'anthropic',
@@ -288,11 +295,11 @@ RSpec.describe SmartTestRunner do
     end
   end
 
-  describe SmartTestRunner do
+  describe AITestRunner do
     subject(:runner) { described_class.new(valid_config, mock_logger) }
 
     let(:valid_config) do
-      instance_double(SmartTestConfig,
+      instance_double(AITestConfig,
                       valid?: true,
                       base_ref: 'main',
                       commit_sha: 'abc123')
@@ -342,8 +349,8 @@ RSpec.describe SmartTestRunner do
     describe '#run' do
       it 'orchestrates the smart test selection process' do
         expect { runner.run }.not_to raise_error
-        expect(mock_logger).to have_received(:info).with('🚀 Starting Smart Test Runner')
-        expect(mock_logger).to have_received(:info).with('✅ Smart test selection completed')
+        expect(mock_logger).to have_received(:info).with('🚀 Starting AI Test Runner')
+        expect(mock_logger).to have_received(:info).with('✅ AI test selection completed')
       end
 
       it 'writes results to files' do

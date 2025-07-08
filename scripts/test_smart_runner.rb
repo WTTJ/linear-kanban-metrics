@@ -1,15 +1,15 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Local test script for the Smart Test Runner
-# This script demonstrates how to use the smart test runner locally
+# Local test script for the AI Test Runner
+# This script demonstrates how to use the AI test runner locally
 
-require_relative '../.github/scripts/smart_test_runner'
+require_relative '../.github/scripts/ai_test_runner'
 require_relative '../.github/scripts/shared/ai_services'
 require 'logger'
 
-puts '🧪 Smart Test Runner - Local Test'
-puts '================================'
+puts '🧪 AI Test Runner - Local Test'
+puts '==============================='
 
 # Mock environment for testing
 test_env = {
@@ -29,8 +29,8 @@ puts
 logger = SharedLoggerFactory.create
 
 # Initialize services
-config = SmartTestConfig.new(test_env)
-runner = SmartTestRunner.new(config, logger)
+config = AITestConfig.new(test_env)
+runner = AITestRunner.new(config, logger)
 
 puts '🔍 Testing individual components...'
 puts

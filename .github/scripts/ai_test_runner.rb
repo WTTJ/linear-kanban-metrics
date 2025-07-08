@@ -8,10 +8,12 @@ require 'octokit'
 require 'logger'
 require 'fileutils'
 require 'pathname'
+require 'open3'
+require 'stringio'
 require_relative 'shared/ai_services'
 
-# Configuration for the smart test runner
-class SmartTestConfig
+# Configuration for the AI test runner
+class AITestConfig
   attr_reader :repo, :pr_number, :commit_sha, :base_ref, :github_token,
               :api_provider, :anthropic_api_key, :dust_api_key, :dust_workspace_id, :dust_agent_id
 
@@ -21,7 +23,7 @@ class SmartTestConfig
     @commit_sha = env.fetch('COMMIT_SHA', nil)
     @base_ref = env.fetch('BASE_REF', 'main')
     @github_token = env.fetch('GITHUB_TOKEN', nil)
-    @api_provider = env.fetch('API_PROVIDER', 'dust').downcase
+    @api_provider = env.fetch('API_PROVIDER', 'anthropic').downcase
     @anthropic_api_key = env.fetch('ANTHROPIC_API_KEY', nil)
     @dust_api_key = env.fetch('DUST_API_KEY', nil)
     @dust_workspace_id = env.fetch('DUST_WORKSPACE_ID', nil)
@@ -43,7 +45,7 @@ class SmartTestConfig
   end
 
   def pr_mode?
-    pr_number > 0
+    pr_number.positive?
   end
 end
 
@@ -97,10 +99,75 @@ class GitChangeAnalyzer
   end
 
   def get_git_diff(base, head)
-    `git diff --no-color #{base}...#{head}`.strip
+    # Use git diff with optimizations for large repositories
+    cmd = [
+      'git', 'diff', '--no-color',
+      '--no-renames',           # Disable rename detection for performance
+      '--diff-filter=ACMRT',    # Only show Added, Copied, Modified, Renamed, Type-changed files
+      '--stat=1000',            # Limit stat output
+      "#{base}...#{head}"
+    ]
+
+    stdout, stderr, status = Open3.capture3(*cmd)
+
+    unless status.success?
+      logger.error "Git diff command failed: #{stderr}"
+      return ''
+    end
+
+    # Log diff size for monitoring
+    diff_size = stdout.bytesize
+    if diff_size > 10_000_000 # 10MB
+      logger.warn "Large diff detected: #{diff_size / 1_000_000}MB - using streaming mode"
+    else
+      logger.debug "Diff size: #{diff_size} bytes"
+    end
+
+    stdout.strip
   end
 
   def parse_diff_for_files(diff_output)
+    # For very large diffs, use streaming to avoid loading everything into memory
+    if diff_output.length > 1_000_000 # 1MB threshold
+      parse_diff_streaming(diff_output)
+    else
+      parse_diff_in_memory(diff_output)
+    end
+  end
+
+  def parse_diff_streaming(diff_output)
+    changed_files = []
+    current_file = nil
+
+    # Use StringIO for streaming line-by-line processing
+    io = StringIO.new(diff_output)
+
+    io.each_line do |line|
+      line = line.chomp # Remove newline without loading full diff
+
+      if line.start_with?('diff --git')
+        # Extract filename from "diff --git a/path/to/file b/path/to/file"
+        match = line.match(%r{diff --git a/(.*?) b/(.*)})
+        current_file = match[2] if match
+      elsif line.start_with?('+++') && current_file
+        # Confirm the file path
+        file_path = line.sub(%r{^\+\+\+ b/}, '').strip
+        # For streaming, we'll do a lightweight analysis without full change extraction
+        changed_files << {
+          path: file_path,
+          type: determine_file_type(file_path),
+          changes: { added: [], removed: [], context: [] } # Placeholder for large diffs
+        }
+      end
+    end
+
+    logger.info "Processed large diff with streaming (#{diff_output.length} bytes)"
+    changed_files.uniq { |f| f[:path] }
+  ensure
+    io&.close
+  end
+
+  def parse_diff_in_memory(diff_output)
     changed_files = []
     current_file = nil
 
@@ -141,6 +208,9 @@ class GitChangeAnalyzer
   end
 
   def extract_changes_for_file(diff_output, file_path)
+    # For large diffs, limit change extraction to avoid memory issues
+    return extract_changes_streaming(diff_output, file_path) if diff_output.length > 1_000_000 # 1MB threshold
+
     lines = diff_output.split("\n")
     file_diff_started = false
     changes = { added: [], removed: [], context: [] }
@@ -156,15 +226,54 @@ class GitChangeAnalyzer
 
       case line[0]
       when '+'
-        changes[:added] << line[1..-1] unless line.start_with?('+++')
+        changes[:added] << line[1..] unless line.start_with?('+++')
       when '-'
-        changes[:removed] << line[1..-1] unless line.start_with?('---')
+        changes[:removed] << line[1..] unless line.start_with?('---')
       when ' '
-        changes[:context] << line[1..-1]
+        changes[:context] << line[1..]
       end
     end
 
     changes
+  end
+
+  def extract_changes_streaming(diff_output, file_path)
+    # For very large diffs, do lightweight extraction
+    io = StringIO.new(diff_output)
+
+    file_diff_started = false
+    changes = { added: [], removed: [], context: [] }
+    line_count = 0
+    max_lines = 100 # Limit to first 100 lines of changes to avoid memory bloat
+
+    io.each_line do |line|
+      line = line.chomp
+
+      if line.include?("b/#{file_path}")
+        file_diff_started = true
+        next
+      end
+
+      next unless file_diff_started
+      break if line.start_with?('diff --git') && !line.include?(file_path)
+      break if line_count >= max_lines # Prevent excessive memory usage
+
+      case line[0]
+      when '+'
+        changes[:added] << line[1..] unless line.start_with?('+++')
+        line_count += 1
+      when '-'
+        changes[:removed] << line[1..] unless line.start_with?('---')
+        line_count += 1
+      when ' '
+        changes[:context] << line[1..] if line_count < max_lines / 2 # Limit context
+        line_count += 1
+      end
+    end
+
+    changes
+  ensure
+    io&.close
   end
 
   def analyze_file_changes(changed_files)
@@ -335,7 +444,7 @@ class AITestSelector
   end
 
   def load_prompt_template
-    prompt_file = File.join(File.dirname(__FILE__), 'smart_test_selection_prompt.md')
+    prompt_file = File.join(File.dirname(__FILE__), 'ai_test_selection_prompt.md')
 
     if File.exist?(prompt_file)
       File.read(prompt_file)
@@ -434,17 +543,17 @@ class AITestSelector
 end
 
 # Main orchestrator class
-class SmartTestRunner
+class AITestRunner
   attr_reader :config, :logger
 
   def initialize(config = nil, logger = nil)
-    @config = config || SmartTestConfig.new
+    @config = config || AITestConfig.new
     @logger = logger || SharedLoggerFactory.create
     setup_output_directory
   end
 
   def run
-    logger.info '🚀 Starting Smart Test Runner'
+    logger.info '🚀 Starting AI Test Runner'
 
     unless config.valid?
       logger.error '❌ Invalid configuration'
@@ -475,7 +584,7 @@ class SmartTestRunner
                     test_discovery: test_discovery
                   })
 
-    logger.info '✅ Smart test selection completed'
+    logger.info '✅ AI test selection completed'
     logger.info "📊 Selected #{selection_result[:selected_tests].size} test files"
   end
 
@@ -505,7 +614,7 @@ class SmartTestRunner
 
   def write_analysis_markdown(selected_tests, analysis_data)
     content = <<~MARKDOWN
-      # 🤖 Smart Test Selection Analysis
+      # 🤖 AI Test Selection Analysis
 
       **Generated at:** #{Time.now.strftime('%Y-%m-%d %H:%M:%S UTC')}
 
@@ -542,4 +651,4 @@ class SmartTestRunner
 end
 
 # Script execution
-SmartTestRunner.new.run if __FILE__ == $PROGRAM_NAME
+AITestRunner.new.run if __FILE__ == $PROGRAM_NAME

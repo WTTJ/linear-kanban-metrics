@@ -13,9 +13,9 @@ This project uses **GitHub Copilot** to automatically review all pull requests a
 
 **📖 [Learn more about our AI Code Review system →](./AI_CODE_REVIEW.md)**
 
-## 🧪 Smart Test Runner
+## 🧪 AI Test Runner
 
-This project includes an **AI-powered Smart Test Runner** that intelligently selects and runs only the tests relevant to your code changes, reducing CI time while maintaining comprehensive coverage.
+This project includes an **AI-powered Test Runner** that intelligently selects and runs only the tests relevant to your code changes, reducing CI time while maintaining comprehensive coverage.
 
 ### Features
 - **🧠 AI-Powered Analysis**: Uses Claude 3 to analyze code changes and understand test dependencies
@@ -23,9 +23,9 @@ This project includes an **AI-powered Smart Test Runner** that intelligently sel
 - **📊 Detailed Reporting**: Provides comprehensive analysis of why tests were selected
 - **🔄 Fallback Safety**: Falls back to running all tests if AI analysis fails
 
-The smart test runner automatically triggers on all pushes and pull requests, analyzing your changes and running only the necessary tests.
+The AI test runner automatically triggers on all pushes and pull requests, analyzing your changes and running only the necessary tests.
 
-**📖 [Learn more about the Smart Test Runner →](./docs/SMART_TEST_RUNNER.md)**
+**📖 [Learn more about the AI Test Runner →](./doc/SMART_TEST_RUNNER.md)**
 
 ## Setup
 

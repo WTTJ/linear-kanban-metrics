@@ -1,4 +1,4 @@
-name: 🤖 Smart Test Runner
+name: 🤖 AI Test Runner
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  smart-tests:
+  ai-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +40,7 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref || github.event.before }}
         run: |
           echo "🔍 Analyzing code changes..."
-          bundle exec ruby .github/scripts/smart_test_runner.rb
+          bundle exec ruby .github/scripts/ai_test_runner.rb
 
       - name: 🧪 Run Selected Tests
         run: |
@@ -67,7 +67,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: smart-test-results
+          name: ai-test-results
           path: |
             tmp/selected_tests.txt
             tmp/test_analysis.json

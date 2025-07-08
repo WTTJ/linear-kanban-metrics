@@ -202,10 +202,6 @@ class PromptBuilder
   end
 end
 
-
-
-
-
 # Module for extracting messages from Dust API responses
 module DustMessageExtractor
   def extract_messages_from_response(api_response)
@@ -448,10 +444,10 @@ module DustResponseProcessor
     end
 
     content = latest_message&.dig('content')
-    
+
     # Try to extract citations from both possible structures
     citations = extract_citations_from_actions(latest_message)
-    
+
     # Fallback to legacy citations structure if no actions citations found
     if citations.empty?
       legacy_citations = latest_message&.dig('citations') || []
@@ -484,14 +480,14 @@ module DustResponseProcessor
 
     actions.each do |action|
       next unless action&.dig('type') == 'tool_action'
-      
+
       output = action&.dig('output') || []
       output.each do |item|
         next unless item&.dig('type') == 'resource'
-        
+
         resource = item&.dig('resource')
         next unless resource&.dig('reference')
-        
+
         # Convert Dust resource format to our expected citation format
         citations << {
           'id' => resource['reference'],

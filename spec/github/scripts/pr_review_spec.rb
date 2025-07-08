@@ -265,6 +265,8 @@ RSpec.describe 'PR Review Refactored' do
       allow(logger).to receive(:info)
       allow(logger).to receive(:debug)
       allow(logger).to receive(:warn)
+      # Mock sleep to prevent test delays
+      allow(provider).to receive(:sleep)
     end
 
     it 'returns correct provider name' do
