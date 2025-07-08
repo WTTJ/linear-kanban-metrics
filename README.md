@@ -13,6 +13,20 @@ This project uses **GitHub Copilot** to automatically review all pull requests a
 
 **📖 [Learn more about our AI Code Review system →](./AI_CODE_REVIEW.md)**
 
+## 🧪 AI Test Runner
+
+This project includes an **AI-powered Test Runner** that intelligently selects and runs only the tests relevant to your code changes, reducing CI time while maintaining comprehensive coverage.
+
+### Features
+- **🧠 AI-Powered Analysis**: Uses Claude 3 to analyze code changes and understand test dependencies
+- **⚡ Performance Optimization**: Runs only relevant tests instead of the entire test suite  
+- **📊 Detailed Reporting**: Provides comprehensive analysis of why tests were selected
+- **🔄 Fallback Safety**: Falls back to running all tests if AI analysis fails
+
+The AI test runner automatically triggers on all pushes and pull requests, analyzing your changes and running only the necessary tests.
+
+**📖 [Learn more about the AI Test Runner →](./doc/AI_TEST_RUNNER.md)**
+
 ## Setup
 
 1. Install Ruby dependencies:

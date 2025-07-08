@@ -212,6 +212,11 @@ RSpec.describe 'PR Review Refactored' do
     it 'raises error for non-200 response' do
       response = double('response', code: '400', body: 'error')
       allow(Net::HTTP).to receive(:start).and_return(response)
+      allow(client).to receive(:sleep) # Mock sleep to speed up test
+
+      # Expect warning logs due to retry attempts
+      expect(logger).to receive(:warn).with(/⚠️ Retry/).at_least(:once)
+      expect(logger).to receive(:error).with(/❌ Max retries/).once
 
       expect { client.post(URI('http://test.com'), {}, '{}') }.to raise_error(StandardError)
     end
@@ -221,7 +226,7 @@ RSpec.describe 'PR Review Refactored' do
     let(:config) { double('config', anthropic_api_key: 'key') }
     let(:http_client) { double('http_client') }
     let(:logger) { double('logger') }
-    let(:provider) { described_class.new(config, http_client, logger) }
+    let(:provider) { described_class.new('key', http_client, logger) }
 
     before do
       allow(logger).to receive(:info)
@@ -237,7 +242,7 @@ RSpec.describe 'PR Review Refactored' do
       api_response = { 'content' => [{ 'text' => 'review content' }] }
       allow(http_client).to receive(:post).and_return(api_response)
 
-      result = provider.request_review('test prompt')
+      result = provider.make_request('test prompt')
       expect(result).to eq('review content')
     end
 
@@ -245,8 +250,8 @@ RSpec.describe 'PR Review Refactored' do
       api_response = { 'content' => [{ 'text' => '' }] }
       allow(http_client).to receive(:post).and_return(api_response)
 
-      result = provider.request_review('test prompt')
-      expect(result).to include('Anthropic did not return a review')
+      result = provider.make_request('test prompt')
+      expect(result).to be_nil
     end
   end
 
@@ -259,12 +264,14 @@ RSpec.describe 'PR Review Refactored' do
     end
     let(:http_client) { double('http_client') }
     let(:logger) { double('logger') }
-    let(:provider) { described_class.new(config, http_client, logger) }
+    let(:provider) { described_class.new('key', 'workspace', 'agent', http_client, logger) }
 
     before do
       allow(logger).to receive(:info)
       allow(logger).to receive(:debug)
       allow(logger).to receive(:warn)
+      # Mock sleep to prevent test delays
+      allow(provider).to receive(:sleep)
     end
 
     it 'returns correct provider name' do
@@ -281,7 +288,7 @@ RSpec.describe 'PR Review Refactored' do
 
       allow(http_client).to receive_messages(post: conversation_response, get: response_data)
 
-      result = provider.request_review('test prompt')
+      result = provider.make_request('test prompt')
       expect(result).to eq('review content')
     end
   end
@@ -292,13 +299,13 @@ RSpec.describe 'PR Review Refactored' do
     let(:logger) { double('logger') }
 
     it 'creates Anthropic provider' do
-      allow(config).to receive(:api_provider).and_return('anthropic')
+      allow(config).to receive_messages(api_provider: 'anthropic', anthropic_api_key: 'key')
       provider = described_class.create(config, http_client, logger)
       expect(provider).to be_a(AnthropicProvider)
     end
 
     it 'creates Dust provider' do
-      allow(config).to receive(:api_provider).and_return('dust')
+      allow(config).to receive_messages(api_provider: 'dust', dust_api_key: 'key', dust_workspace_id: 'workspace', dust_agent_id: 'agent')
       provider = described_class.create(config, http_client, logger)
       expect(provider).to be_a(DustProvider)
     end
@@ -366,7 +373,7 @@ RSpec.describe 'PR Review Refactored' do
 
       allow(dependencies[:data_gatherer]).to receive(:gather_data).and_return({})
       allow(dependencies[:prompt_builder]).to receive(:build_prompt).and_return('prompt')
-      allow(dependencies[:ai_provider]).to receive_messages(request_review: 'review', provider_name: 'AI Provider')
+      allow(dependencies[:ai_provider]).to receive_messages(make_request: 'review', provider_name: 'AI Provider')
       expect(dependencies[:comment_service]).to receive(:post_comment)
 
       reviewer.run
