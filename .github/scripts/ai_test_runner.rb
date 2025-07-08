@@ -49,17 +49,224 @@ class AITestConfig
   end
 end
 
-# Service to analyze git changes and extract relevant information
-class GitChangeAnalyzer
-  # Constants for diff processing limits
-  LARGE_DIFF_THRESHOLD = 10_000_000 # 10MB - threshold for switching to streaming mode
-  MEMORY_DIFF_THRESHOLD = 1_000_000 # 1MB - threshold for memory-efficient processing
-  MAX_STREAMING_LINES = 100 # Maximum lines to process in streaming mode to avoid memory bloat
+# Configuration for diff processing limits and behavior
+module DiffProcessingConfig
+  # Diff size thresholds with rationale:
+  # - LARGE_DIFF_THRESHOLD: 10MB is chosen as the point where git operations become noticeably slow
+  #   and memory usage becomes a concern. This is based on typical CI environments with 2-4GB RAM.
+  # - MEMORY_DIFF_THRESHOLD: 1MB threshold for switching to streaming mode to prevent memory spikes
+  #   during line-by-line processing. Keeps memory usage under 100MB even for large changes.
+  # - MAX_STREAMING_LINES: 100 lines limit for streaming mode balances between getting enough
+  #   context for AI analysis while preventing excessive memory consumption on very large files.
+
+  LARGE_DIFF_THRESHOLD = ENV.fetch('LARGE_DIFF_THRESHOLD', 10_000_000).to_i # 10MB default
+  MEMORY_DIFF_THRESHOLD = ENV.fetch('MEMORY_DIFF_THRESHOLD', 1_000_000).to_i # 1MB default
+  MAX_STREAMING_LINES = ENV.fetch('MAX_STREAMING_LINES', 100).to_i # 100 lines default
+
+  def self.large_diff_threshold
+    LARGE_DIFF_THRESHOLD
+  end
+
+  def self.memory_diff_threshold
+    MEMORY_DIFF_THRESHOLD
+  end
+
+  def self.max_streaming_lines
+    MAX_STREAMING_LINES
+  end
+end
+
+# Service to parse git diffs efficiently for different file sizes
+class DiffParser
+  include DiffProcessingConfig
 
   attr_reader :logger
 
   def initialize(logger)
     @logger = logger
+  end
+
+  def parse_for_files(diff_output)
+    # For very large diffs, use streaming to avoid loading everything into memory
+    if diff_output.length > DiffProcessingConfig.memory_diff_threshold
+      parse_streaming(diff_output)
+    else
+      parse_in_memory(diff_output)
+    end
+  end
+
+  def extract_changes_for_file(diff_output, file_path)
+    # For large diffs, limit change extraction to avoid memory issues
+    if diff_output.length > DiffProcessingConfig.memory_diff_threshold
+      extract_changes_streaming(diff_output, file_path)
+    else
+      extract_changes_in_memory(diff_output, file_path)
+    end
+  end
+
+  private
+
+  def parse_streaming(diff_output)
+    changed_files = []
+    current_file = nil
+
+    # Use StringIO for streaming line-by-line processing
+    io = StringIO.new(diff_output)
+
+    io.each_line do |line|
+      line = line.chomp # Remove newline without loading full diff
+
+      if line.start_with?('diff --git')
+        # Extract filename from "diff --git a/path/to/file b/path/to/file"
+        match = line.match(%r{diff --git a/(.*?) b/(.*)})
+        current_file = match[2] if match
+      elsif line.start_with?('+++') && current_file
+        # Confirm the file path
+        file_path = line.sub(%r{^\+\+\+ b/}, '').strip
+        # For streaming, we'll do a lightweight analysis without full change extraction
+        changed_files << {
+          path: file_path,
+          type: FileTypeClassifier.determine_type(file_path),
+          changes: { added: [], removed: [], context: [] } # Placeholder for large diffs
+        }
+      end
+    end
+
+    logger.info "Processed large diff with streaming (#{diff_output.length} bytes)"
+    changed_files.uniq { |f| f[:path] }
+  ensure
+    io&.close
+  end
+
+  def parse_in_memory(diff_output)
+    changed_files = []
+    current_file = nil
+
+    # Use StringIO for memory-efficient line processing instead of split("\n")
+    io = StringIO.new(diff_output)
+
+    io.each_line do |line|
+      line = line.chomp # Remove newline without loading full diff
+
+      if line.start_with?('diff --git')
+        # Extract filename from "diff --git a/path/to/file b/path/to/file"
+        match = line.match(%r{diff --git a/(.*?) b/(.*)})
+        current_file = match[2] if match
+      elsif line.start_with?('+++') && current_file
+        # Confirm the file path
+        file_path = line.sub(%r{^\+\+\+ b/}, '').strip
+        changed_files << {
+          path: file_path,
+          type: FileTypeClassifier.determine_type(file_path),
+          changes: extract_changes_for_file(diff_output, file_path)
+        }
+      end
+    end
+
+    changed_files.uniq { |f| f[:path] }
+  ensure
+    io&.close
+  end
+
+  def extract_changes_in_memory(diff_output, file_path)
+    # Use StringIO for memory-efficient processing instead of split("\n")
+    io = StringIO.new(diff_output)
+    file_diff_started = false
+    changes = { added: [], removed: [], context: [] }
+
+    io.each_line do |line|
+      line = line.chomp # Remove newline without loading full diff
+
+      if line.include?("b/#{file_path}")
+        file_diff_started = true
+        next
+      end
+
+      next unless file_diff_started
+      break if line.start_with?('diff --git') && !line.include?(file_path)
+
+      case line[0]
+      when '+'
+        changes[:added] << line[1..] unless line.start_with?('+++')
+      when '-'
+        changes[:removed] << line[1..] unless line.start_with?('---')
+      when ' '
+        changes[:context] << line[1..]
+      end
+    end
+
+    changes
+  ensure
+    io&.close
+  end
+
+  def extract_changes_streaming(diff_output, file_path)
+    # For very large diffs, do lightweight extraction
+    io = StringIO.new(diff_output)
+
+    file_diff_started = false
+    changes = { added: [], removed: [], context: [] }
+    line_count = 0
+    max_lines = DiffProcessingConfig.max_streaming_lines
+
+    io.each_line do |line|
+      line = line.chomp
+
+      if line.include?("b/#{file_path}")
+        file_diff_started = true
+        next
+      end
+
+      next unless file_diff_started
+      break if line.start_with?('diff --git') && !line.include?(file_path)
+      break if line_count >= max_lines # Prevent excessive memory usage
+
+      case line[0]
+      when '+'
+        changes[:added] << line[1..] unless line.start_with?('+++')
+        line_count += 1
+      when '-'
+        changes[:removed] << line[1..] unless line.start_with?('---')
+        line_count += 1
+      when ' '
+        changes[:context] << line[1..] if line_count < max_lines / 2 # Limit context
+        line_count += 1
+      end
+    end
+
+    changes
+  ensure
+    io&.close
+  end
+end
+
+# Service to classify file types based on file paths and patterns
+class FileTypeClassifier
+  def self.determine_type(file_path)
+    case file_path
+    when %r{^lib/.*\.rb$}
+      :source
+    when %r{^spec/.*_spec\.rb$}
+      :test
+    when %r{^\.github/}
+      :github_config
+    when /Gemfile|.*\.gemspec$/
+      :dependency
+    when /README|\.md$/
+      :documentation
+    else
+      :other
+    end
+  end
+end
+
+# Service to analyze git changes and extract relevant information
+class GitChangeAnalyzer
+  attr_reader :logger, :diff_parser
+
+  def initialize(logger)
+    @logger = logger
+    @diff_parser = DiffParser.new(logger)
   end
 
   def analyze_changes(config)
@@ -73,7 +280,7 @@ class GitChangeAnalyzer
                   end
 
     # Parse the diff to extract changed files and their changes
-    changed_files = parse_diff_for_files(diff_output)
+    changed_files = diff_parser.parse_for_files(diff_output)
 
     {
       diff: diff_output,
@@ -122,175 +329,13 @@ class GitChangeAnalyzer
 
     # Log diff size for monitoring
     diff_size = stdout.bytesize
-    if diff_size > LARGE_DIFF_THRESHOLD
-      logger.warn "Large diff detected: #{diff_size / MEMORY_DIFF_THRESHOLD}MB - using streaming mode"
+    if diff_size > DiffProcessingConfig.large_diff_threshold
+      logger.warn "Large diff detected: #{diff_size / 1_000_000}MB - using streaming mode"
     else
       logger.debug "Diff size: #{diff_size} bytes"
     end
 
     stdout.strip
-  end
-
-  def parse_diff_for_files(diff_output)
-    # For very large diffs, use streaming to avoid loading everything into memory
-    if diff_output.length > MEMORY_DIFF_THRESHOLD
-      parse_diff_streaming(diff_output)
-    else
-      parse_diff_in_memory(diff_output)
-    end
-  end
-
-  def parse_diff_streaming(diff_output)
-    changed_files = []
-    current_file = nil
-
-    # Use StringIO for streaming line-by-line processing
-    io = StringIO.new(diff_output)
-
-    io.each_line do |line|
-      line = line.chomp # Remove newline without loading full diff
-
-      if line.start_with?('diff --git')
-        # Extract filename from "diff --git a/path/to/file b/path/to/file"
-        match = line.match(%r{diff --git a/(.*?) b/(.*)})
-        current_file = match[2] if match
-      elsif line.start_with?('+++') && current_file
-        # Confirm the file path
-        file_path = line.sub(%r{^\+\+\+ b/}, '').strip
-        # For streaming, we'll do a lightweight analysis without full change extraction
-        changed_files << {
-          path: file_path,
-          type: determine_file_type(file_path),
-          changes: { added: [], removed: [], context: [] } # Placeholder for large diffs
-        }
-      end
-    end
-
-    logger.info "Processed large diff with streaming (#{diff_output.length} bytes)"
-    changed_files.uniq { |f| f[:path] }
-  ensure
-    io&.close
-  end
-
-  def parse_diff_in_memory(diff_output)
-    changed_files = []
-    current_file = nil
-
-    # Use StringIO for memory-efficient line processing instead of split("\n")
-    io = StringIO.new(diff_output)
-
-    io.each_line do |line|
-      line = line.chomp # Remove newline without loading full diff
-
-      if line.start_with?('diff --git')
-        # Extract filename from "diff --git a/path/to/file b/path/to/file"
-        match = line.match(%r{diff --git a/(.*?) b/(.*)})
-        current_file = match[2] if match
-      elsif line.start_with?('+++') && current_file
-        # Confirm the file path
-        file_path = line.sub(%r{^\+\+\+ b/}, '').strip
-        changed_files << {
-          path: file_path,
-          type: determine_file_type(file_path),
-          changes: extract_changes_for_file(diff_output, file_path)
-        }
-      end
-    end
-
-    changed_files.uniq { |f| f[:path] }
-  ensure
-    io&.close
-  end
-
-  def determine_file_type(file_path)
-    case file_path
-    when %r{^lib/.*\.rb$}
-      :source
-    when %r{^spec/.*_spec\.rb$}
-      :test
-    when %r{^\.github/}
-      :github_config
-    when /Gemfile|.*\.gemspec$/
-      :dependency
-    when /README|\.md$/
-      :documentation
-    else
-      :other
-    end
-  end
-
-  def extract_changes_for_file(diff_output, file_path)
-    # For large diffs, limit change extraction to avoid memory issues
-    return extract_changes_streaming(diff_output, file_path) if diff_output.length > MEMORY_DIFF_THRESHOLD
-
-    # Use StringIO for memory-efficient processing instead of split("\n")
-    io = StringIO.new(diff_output)
-    file_diff_started = false
-    changes = { added: [], removed: [], context: [] }
-
-    io.each_line do |line|
-      line = line.chomp # Remove newline without loading full diff
-
-      if line.include?("b/#{file_path}")
-        file_diff_started = true
-        next
-      end
-
-      next unless file_diff_started
-      break if line.start_with?('diff --git') && !line.include?(file_path)
-
-      case line[0]
-      when '+'
-        changes[:added] << line[1..] unless line.start_with?('+++')
-      when '-'
-        changes[:removed] << line[1..] unless line.start_with?('---')
-      when ' '
-        changes[:context] << line[1..]
-      end
-    end
-
-    changes
-  ensure
-    io&.close
-  end
-
-  def extract_changes_streaming(diff_output, file_path)
-    # For very large diffs, do lightweight extraction
-    io = StringIO.new(diff_output)
-
-    file_diff_started = false
-    changes = { added: [], removed: [], context: [] }
-    line_count = 0
-    max_lines = MAX_STREAMING_LINES
-
-    io.each_line do |line|
-      line = line.chomp
-
-      if line.include?("b/#{file_path}")
-        file_diff_started = true
-        next
-      end
-
-      next unless file_diff_started
-      break if line.start_with?('diff --git') && !line.include?(file_path)
-      break if line_count >= max_lines # Prevent excessive memory usage
-
-      case line[0]
-      when '+'
-        changes[:added] << line[1..] unless line.start_with?('+++')
-        line_count += 1
-      when '-'
-        changes[:removed] << line[1..] unless line.start_with?('---')
-        line_count += 1
-      when ' '
-        changes[:context] << line[1..] if line_count < max_lines / 2 # Limit context
-        line_count += 1
-      end
-    end
-
-    changes
-  ensure
-    io&.close
   end
 
   def analyze_file_changes(changed_files)
