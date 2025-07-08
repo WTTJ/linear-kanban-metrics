@@ -4,8 +4,75 @@ require 'net/http'
 require 'json'
 require 'logger'
 
+# Retry handler with exponential backoff for API calls
+module RetryHandler
+  # Constants for retry configuration
+  DEFAULT_MAX_RETRIES = 3
+  DEFAULT_BASE_DELAY = 1.0  # Initial delay in seconds
+  DEFAULT_MAX_DELAY = 30.0  # Maximum delay in seconds
+  DEFAULT_BACKOFF_FACTOR = 2.0 # Exponential backoff multiplier
+
+  # Retry with exponential backoff
+  def retry_with_backoff(max_retries: DEFAULT_MAX_RETRIES, base_delay: DEFAULT_BASE_DELAY,
+                         max_delay: DEFAULT_MAX_DELAY, backoff_factor: DEFAULT_BACKOFF_FACTOR)
+    retries = 0
+
+    loop do
+      result = yield(retries)
+      return result
+    rescue StandardError => e
+      retries += 1
+
+      if retries >= max_retries
+        logger.error "❌ Max retries (#{max_retries}) exceeded. Last error: #{e.message}"
+        raise e
+      end
+
+      delay = calculate_delay(retries, base_delay, max_delay, backoff_factor)
+      logger.warn "⚠️ Retry #{retries}/#{max_retries} after #{delay}s. Error: #{e.message}"
+
+      sleep(delay)
+    end
+  end
+
+  # Handle rate limiting response with exponential backoff
+  def handle_rate_limit_error(response, retries, max_retries)
+    return false if retries >= max_retries - 1
+
+    # Extract rate limit information if available
+    retry_after = extract_retry_after(response)
+    delay = retry_after || calculate_delay(retries + 1, DEFAULT_BASE_DELAY, DEFAULT_MAX_DELAY, DEFAULT_BACKOFF_FACTOR)
+
+    logger.warn "🚫 Rate limited. Waiting #{delay}s before retry (attempt #{retries + 1}/#{max_retries})"
+    sleep(delay)
+    true
+  end
+
+  private
+
+  def calculate_delay(attempt, base_delay, max_delay, backoff_factor)
+    # Exponential backoff with jitter
+    delay = base_delay * (backoff_factor**(attempt - 1))
+    delay = [delay, max_delay].min # Cap at max_delay
+    delay += rand * 0.1 * delay # Add up to 10% jitter to avoid thundering herd
+    delay.round(2)
+  end
+
+  def extract_retry_after(response)
+    return nil unless response.respond_to?(:headers) || response.respond_to?(:header)
+
+    # Try to extract Retry-After header
+    retry_after = response.respond_to?(:headers) ? response.headers['Retry-After'] : response.header['Retry-After']
+    return nil unless retry_after
+
+    retry_after.to_i if retry_after.to_i.positive?
+  end
+end
+
 # Shared HTTP client helper
 class HTTPClient
+  include RetryHandler
+
   attr_reader :logger, :http_timeout, :read_timeout
 
   def initialize(logger, timeouts = {})
@@ -19,19 +86,25 @@ class HTTPClient
     headers.each { |key, value| request[key] = value }
     request.body = body
 
-    make_request(uri, request)
+    make_request_with_retry(uri, request)
   end
 
   def get(uri, headers)
     request = Net::HTTP::Get.new(uri)
     headers.each { |key, value| request[key] = value }
 
-    make_request(uri, request)
+    make_request_with_retry(uri, request)
   end
 
   private
 
-  def make_request(uri, request)
+  def make_request_with_retry(uri, request)
+    retry_with_backoff do |retries|
+      make_request(uri, request, retries)
+    end
+  end
+
+  def make_request(uri, request, retries = 0)
     response = Net::HTTP.start(uri.hostname, uri.port,
                                use_ssl: true,
                                open_timeout: @http_timeout,
@@ -39,18 +112,34 @@ class HTTPClient
       http.request(request)
     end
 
-    handle_response(response)
+    handle_response(response, retries)
   rescue Net::OpenTimeout, Net::ReadTimeout => e
     logger.error "HTTP request timed out: #{e.message}"
     raise StandardError, "HTTP request timed out after #{@read_timeout} seconds"
   end
 
-  def handle_response(response)
-    unless response.code == '200'
+  def handle_response(response, retries)
+    case response.code
+    when '200'
+      parse_response_body(response)
+    when '429' # Rate limited
+      raise StandardError, 'Rate limited - will retry' if handle_rate_limit_error(response, retries, DEFAULT_MAX_RETRIES)
+
+      raise StandardError, 'Rate limited - max retries exceeded'
+
+    when '500', '502', '503', '504' # Server errors - retry
+      error_msg = "Server error #{response.code}: #{response.body}"
+      logger.warn error_msg
+      raise StandardError, error_msg
+    else
       error_msg = "HTTP request failed with status #{response.code}: #{response.body}"
       logger.error error_msg
       raise StandardError, error_msg
     end
+  end
+
+  def parse_response_body(response)
+    return response.body if response.body.nil? || response.body.empty?
 
     JSON.parse(response.body)
   rescue JSON::ParserError => e
@@ -204,6 +293,7 @@ end
 
 # Dust AI provider
 class DustProvider < AIProvider
+  include RetryHandler
   include DustResponseProcessor
   API_BASE_URL = 'https://dust.tt'
 
@@ -238,7 +328,7 @@ class DustProvider < AIProvider
     logger.info "⏳ Waiting #{initial_wait} seconds for agent to process..."
     sleep(initial_wait)
 
-    get_response_with_retries(conversation_id)
+    get_response_with_exponential_backoff(conversation_id)
   end
 
   def provider_name
@@ -283,11 +373,13 @@ class DustProvider < AIProvider
     extract_content(response)
   end
 
-  def get_response_with_retries(conversation_id, max_retries = 5)
-    retries = 0
+  def get_response_with_exponential_backoff(conversation_id)
+    logger.info "🔍 Fetching response for conversation: #{conversation_id}"
 
-    while retries < max_retries
-      response = attempt_fetch_response(conversation_id, retries, max_retries)
+    retry_with_backoff(max_retries: 5, base_delay: 2.0, max_delay: 30.0) do |retries|
+      logger.info "🔄 Attempting to fetch response (attempt #{retries + 1}/5) for conversation: #{conversation_id}"
+
+      response = get_response(conversation_id)
 
       if response_is_valid?(response)
         logger.info "✅ Response validated successfully for conversation: #{conversation_id}"
@@ -295,25 +387,13 @@ class DustProvider < AIProvider
       end
 
       logger.info "⏳ Response not valid, will retry. Response: '#{response.to_s[0..100]}...'"
-      handle_retry_delay(retries, max_retries, conversation_id)
-      retries += 1
+      raise StandardError, 'Response not ready yet'
     end
-
-    logger.error "❌ Dust agent did not respond after #{max_retries} attempts (conversation: #{conversation_id})"
+  rescue StandardError => e
+    logger.error "❌ Failed to get response after maximum retries for conversation: #{conversation_id}. Error: #{e.message}"
     conversation_uri = "#{API_BASE_URL}/api/v1/w/#{workspace_id}/assistant/conversations/#{conversation_id}"
     logger.error "🔗 Check conversation status at: #{conversation_uri}"
     nil
-  end
-
-  def attempt_fetch_response(conversation_id, retries, max_retries)
-    logger.info "🔄 Attempting to fetch response (attempt #{retries + 1}/#{max_retries}) for conversation: #{conversation_id}"
-    get_response(conversation_id)
-  rescue StandardError => e
-    logger.warn "⚠️ Error fetching response (attempt #{retries + 1}) for conversation #{conversation_id}: #{e.message}"
-    raise e if retries >= max_retries - 1
-
-    sleep(3)
-    'retry_needed'
   end
 
   def response_is_valid?(response)
@@ -323,14 +403,6 @@ class DustProvider < AIProvider
 
     logger.debug "Response validated as valid: length=#{response.to_s.length}"
     true
-  end
-
-  def handle_retry_delay(retries, max_retries, conversation_id)
-    return unless retries < max_retries - 1
-
-    wait_time = (retries + 1) * 5 # 5s, 10s, 15s, 20s
-    logger.info "⏳ Agent hasn't responded yet, waiting #{wait_time} seconds before retry (conversation: #{conversation_id})..."
-    sleep(wait_time)
   end
 end
 

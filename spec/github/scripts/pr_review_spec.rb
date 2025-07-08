@@ -212,6 +212,11 @@ RSpec.describe 'PR Review Refactored' do
     it 'raises error for non-200 response' do
       response = double('response', code: '400', body: 'error')
       allow(Net::HTTP).to receive(:start).and_return(response)
+      allow(client).to receive(:sleep) # Mock sleep to speed up test
+
+      # Expect warning logs due to retry attempts
+      expect(logger).to receive(:warn).with(/⚠️ Retry/).at_least(:once)
+      expect(logger).to receive(:error).with(/❌ Max retries/).once
 
       expect { client.post(URI('http://test.com'), {}, '{}') }.to raise_error(StandardError)
     end

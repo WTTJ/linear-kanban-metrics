@@ -1,11 +1,11 @@
-# 🤖 Smart Test Runner
+# 🤖 AI Test Runner
 
 An AI-powered GitHub Action that intelligently selects and runs only the tests relevant to your code changes, reducing CI time while maintaining comprehensive coverage.
 
 ## Features
 
 - **🧠 AI-Powered Analysis**: Uses Claude 3 Sonnet to analyze code changes and understand test dependencies
-- **🎯 Smart Test Selection**: Identifies both direct and indirect tests that may be affected by changes
+- **🎯 AI Test Selection**: Identifies both direct and indirect tests that may be affected by changes
 - **⚡ Performance Optimization**: Runs only relevant tests instead of the entire test suite
 - **📊 Detailed Reporting**: Provides comprehensive analysis of why tests were selected
 - **🔄 Fallback Safety**: Falls back to running all tests if AI analysis fails
@@ -42,7 +42,7 @@ Set repository variables:
 
 ### 3. The Workflow is Ready!
 
-The smart test runner is already configured in `.github/workflows/smart_tests.yml` and will automatically:
+The AI test runner is already configured in `.github/workflows/smart_tests.yml` and will automatically:
 
 - Trigger on pushes to `main` and `develop` branches
 - Trigger on pull requests to `main` and `develop` branches
@@ -51,7 +51,7 @@ The smart test runner is already configured in `.github/workflows/smart_tests.ym
 
 ## Manual Usage
 
-You can also run the smart test selector locally:
+You can also run the AI test selector locally:
 
 ```bash
 # Set required environment variables
@@ -112,7 +112,7 @@ The AI considers multiple factors when selecting tests:
 
 ## Output Files
 
-The smart test runner generates several output files:
+The AI test runner generates several output files:
 
 ### `tmp/selected_tests.txt`
 Simple list of selected test files (one per line) used by the GitHub workflow.
@@ -206,7 +206,7 @@ Enable debug logging by setting the log level:
 
 ```ruby
 logger = Logger.new($stdout, level: Logger::DEBUG)
-runner = SmartTestRunner.new(config, logger)
+runner = AITestRunner.new(config, logger)
 ```
 
 ## Contributing
@@ -250,13 +250,13 @@ The system automatically falls back to a built-in prompt if the external file is
 ## Architecture
 
 ```
-SmartTestRunner
-├── SmartTestConfig          # Configuration management
+AITestRunner
+├── AITestConfig             # Configuration management
 ├── GitChangeAnalyzer        # Git diff analysis and parsing
 ├── TestDiscoveryService     # Test file discovery and mapping
 ├── AITestSelector          # AI-powered test selection
 │   └── ai_test_selection_prompt.md  # External AI prompt template
-└── SmartTestRunner         # Main orchestrator
+└── AITestRunner            # Main orchestrator
 ```
 
 ## Performance Benefits

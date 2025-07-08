@@ -25,7 +25,7 @@ This project includes an **AI-powered Test Runner** that intelligently selects a
 
 The AI test runner automatically triggers on all pushes and pull requests, analyzing your changes and running only the necessary tests.
 
-**📖 [Learn more about the AI Test Runner →](./doc/SMART_TEST_RUNNER.md)**
+**📖 [Learn more about the AI Test Runner →](./doc/AI_TEST_RUNNER.md)**
 
 ## Setup
 

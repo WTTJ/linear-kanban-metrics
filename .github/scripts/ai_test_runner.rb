@@ -51,6 +51,11 @@ end
 
 # Service to analyze git changes and extract relevant information
 class GitChangeAnalyzer
+  # Constants for diff processing limits
+  LARGE_DIFF_THRESHOLD = 10_000_000 # 10MB - threshold for switching to streaming mode
+  MEMORY_DIFF_THRESHOLD = 1_000_000 # 1MB - threshold for memory-efficient processing
+  MAX_STREAMING_LINES = 100 # Maximum lines to process in streaming mode to avoid memory bloat
+
   attr_reader :logger
 
   def initialize(logger)
@@ -117,8 +122,8 @@ class GitChangeAnalyzer
 
     # Log diff size for monitoring
     diff_size = stdout.bytesize
-    if diff_size > 10_000_000 # 10MB
-      logger.warn "Large diff detected: #{diff_size / 1_000_000}MB - using streaming mode"
+    if diff_size > LARGE_DIFF_THRESHOLD
+      logger.warn "Large diff detected: #{diff_size / MEMORY_DIFF_THRESHOLD}MB - using streaming mode"
     else
       logger.debug "Diff size: #{diff_size} bytes"
     end
@@ -128,7 +133,7 @@ class GitChangeAnalyzer
 
   def parse_diff_for_files(diff_output)
     # For very large diffs, use streaming to avoid loading everything into memory
-    if diff_output.length > 1_000_000 # 1MB threshold
+    if diff_output.length > MEMORY_DIFF_THRESHOLD
       parse_diff_streaming(diff_output)
     else
       parse_diff_in_memory(diff_output)
@@ -171,7 +176,12 @@ class GitChangeAnalyzer
     changed_files = []
     current_file = nil
 
-    diff_output.split("\n").each do |line|
+    # Use StringIO for memory-efficient line processing instead of split("\n")
+    io = StringIO.new(diff_output)
+
+    io.each_line do |line|
+      line = line.chomp # Remove newline without loading full diff
+
       if line.start_with?('diff --git')
         # Extract filename from "diff --git a/path/to/file b/path/to/file"
         match = line.match(%r{diff --git a/(.*?) b/(.*)})
@@ -188,6 +198,8 @@ class GitChangeAnalyzer
     end
 
     changed_files.uniq { |f| f[:path] }
+  ensure
+    io&.close
   end
 
   def determine_file_type(file_path)
@@ -209,13 +221,16 @@ class GitChangeAnalyzer
 
   def extract_changes_for_file(diff_output, file_path)
     # For large diffs, limit change extraction to avoid memory issues
-    return extract_changes_streaming(diff_output, file_path) if diff_output.length > 1_000_000 # 1MB threshold
+    return extract_changes_streaming(diff_output, file_path) if diff_output.length > MEMORY_DIFF_THRESHOLD
 
-    lines = diff_output.split("\n")
+    # Use StringIO for memory-efficient processing instead of split("\n")
+    io = StringIO.new(diff_output)
     file_diff_started = false
     changes = { added: [], removed: [], context: [] }
 
-    lines.each do |line|
+    io.each_line do |line|
+      line = line.chomp # Remove newline without loading full diff
+
       if line.include?("b/#{file_path}")
         file_diff_started = true
         next
@@ -235,6 +250,8 @@ class GitChangeAnalyzer
     end
 
     changes
+  ensure
+    io&.close
   end
 
   def extract_changes_streaming(diff_output, file_path)
@@ -244,7 +261,7 @@ class GitChangeAnalyzer
     file_diff_started = false
     changes = { added: [], removed: [], context: [] }
     line_count = 0
-    max_lines = 100 # Limit to first 100 lines of changes to avoid memory bloat
+    max_lines = MAX_STREAMING_LINES
 
     io.each_line do |line|
       line = line.chomp
