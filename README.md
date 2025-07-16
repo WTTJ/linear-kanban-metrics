@@ -11,7 +11,7 @@ This project uses **GitHub Copilot** to automatically review all pull requests a
 - Testing quality and security considerations
 - Code maintainability and performance
 
-**📖 [Learn more about our AI Code Review system →](./AI_CODE_REVIEW.md)**
+**📖 [Learn more about our AI Code Review coding standards →](./doc/CODING_STANDARDS.md)**
 
 ## 🧪 AI Test Runner
 
@@ -323,7 +323,7 @@ Perfect for:
 
 This project maintains high code quality with comprehensive testing and automated checks:
 
-- **546 RSpec tests** with **91.17% code coverage**
+- **Comprehensive RSpec test suite** with **high code coverage** (minimum 85% overall, 65% per file)
 - **Zero RuboCop offenses** (style and quality checks)
 - **Brakeman security analysis** (no vulnerabilities found)
 
@@ -341,10 +341,10 @@ bundle exec rubocop
 bundle exec brakeman --force
 
 # Run all checks locally (like CI)
-./bin/ci-local
+./bin/ci
 
-# Test GitHub Actions workflows locally
-./bin/github-actions-test
+# Run the main kanban metrics tool
+./bin/kanban_metrics
 ```
 
 ### Continuous Integration & Pull Request Analysis
@@ -365,9 +365,7 @@ The project includes comprehensive CI/CD with both CircleCI and GitHub Actions:
 - **Code quality checks** with RuboCop
 - **Nightly comprehensive audits**
 
-See [`.github/ACTIONS.md`](.github/ACTIONS.md) and [CIRCLECI.md](CIRCLECI.md) for detailed setup instructions.
-
-See [CIRCLECI.md](CIRCLECI.md) for detailed setup instructions and configuration details.
+See the [GitHub Actions workflows](.github/workflows/) for detailed CI/CD configuration.
 
 ### Contributing
 
