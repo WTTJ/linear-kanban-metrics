@@ -1,14 +1,10 @@
 # RuboCop configuration for kanban-script gem
 # See https://docs.rubocop.org/rubocop/configuration.html
 
-require:
-  - rubocop-rspec
-  - rubocop-rspec_rails
-
 plugins:
   - rubocop-performance
-  - rubocop-capybara
   - rubocop-factory_bot
+  - rubocop-rspec
 
 AllCops:
   TargetRubyVersion: 3.0
