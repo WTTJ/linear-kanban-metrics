@@ -1,0 +1,304 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Bundle Install",
+      "type": "shell",
+      "command": "bundle",
+      "args": [
+        "install"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Install Ruby gem dependencies"
+    },
+    {
+      "label": "Run Tests",
+      "type": "shell",
+      "command": "bundle",
+      "args": [
+        "exec",
+        "rspec"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Run RSpec tests"
+    },
+    {
+      "label": "Run Tests with Coverage",
+      "type": "shell",
+      "command": "bundle",
+      "args": [
+        "exec",
+        "rspec"
+      ],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "COVERAGE": "true"
+        }
+      },
+      "detail": "Run RSpec tests with SimpleCov coverage report"
+    },
+    {
+      "label": "Run Specific Test File",
+      "type": "shell",
+      "command": "bundle",
+      "args": [
+        "exec",
+        "rspec",
+        "${file}"
+      ],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Run RSpec tests for the currently open file"
+    },
+    {
+      "label": "Run RuboCop",
+      "type": "shell",
+      "command": "bundle",
+      "args": [
+        "exec",
+        "rubocop"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": {
+        "owner": "rubocop",
+        "fileLocation": "relative",
+        "pattern": {
+          "regexp": "^([^:]+):(\\d+):(\\d+): ([CWE]): (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      },
+      "detail": "Run RuboCop linter"
+    },
+    {
+      "label": "Run RuboCop Auto-fix",
+      "type": "shell",
+      "command": "bundle",
+      "args": [
+        "exec",
+        "rubocop",
+        "-A"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Run RuboCop with auto-fix for correctable offenses"
+    },
+    {
+      "label": "Run Brakeman Security Scan",
+      "type": "shell",
+      "command": "bundle",
+      "args": [
+        "exec",
+        "brakeman",
+        "--force"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Run Brakeman security analysis"
+    },
+    {
+      "label": "Run Guard",
+      "type": "shell",
+      "command": "bundle",
+      "args": [
+        "exec",
+        "guard"
+      ],
+      "group": "build",
+      "isBackground": true,
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Start Guard file watcher for automated testing and linting"
+    },
+    {
+      "label": "Run Kanban Metrics",
+      "type": "shell",
+      "command": "./bin/kanban_metrics",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Run the main kanban metrics collection script"
+    },
+    {
+      "label": "Run Kanban Metrics (JSON output)",
+      "type": "shell",
+      "command": "./bin/kanban_metrics",
+      "args": [
+        "--format",
+        "json"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Run kanban metrics with JSON output format"
+    },
+    {
+      "label": "Run CI Locally",
+      "type": "shell",
+      "command": "./bin/ci",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Run full CI pipeline locally (tests, linting, security)"
+    },
+    {
+      "label": "Clean Coverage Reports",
+      "type": "shell",
+      "command": "rm",
+      "args": [
+        "-rf",
+        "coverage/"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Clean up coverage reports directory"
+    },
+    {
+      "label": "Clean Temporary Files",
+      "type": "shell",
+      "command": "rm",
+      "args": [
+        "-rf",
+        "tmp/"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Clean up temporary files and cache"
+    }
+  ]
+}

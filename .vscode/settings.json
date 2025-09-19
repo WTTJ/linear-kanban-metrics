@@ -1,0 +1,59 @@
+{
+  "ruby.useLanguageServer": true,
+  "ruby.lint": {
+    "rubocop": {
+      "useBundler": true
+    }
+  },
+  "ruby.format": "rubocop",
+  "files.associations": {
+    "Gemfile": "ruby",
+    "Guardfile": "ruby",
+    ".env": "dotenv",
+    ".env.*": "dotenv"
+  },
+  "files.watcherExclude": {
+    "**/tmp/**": true,
+    "**/coverage/**": true,
+    "**/reports/**": true,
+    "**/.git/**": true,
+    "**/node_modules/**": true,
+    "**/vendor/bundle/**": true
+  },
+  "search.exclude": {
+    "**/tmp/**": true,
+    "**/coverage/**": true,
+    "**/reports/**": true,
+    "**/vendor/bundle/**": true
+  },
+  "files.exclude": {
+    "**/tmp/**": false,
+    "**/coverage/**": false,
+    "**/reports/**": false
+  },
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "terminal.integrated.defaultProfile.osx": "zsh",
+  "ruby.intellisense": "rubyLsp",
+  "ruby.rubocop.useBundler": true,
+  "ruby.rubocop.configFilePath": ".rubocop.yml",
+  "editor.formatOnSave": true,
+  "editor.formatOnType": false,
+  "[ruby]": {
+    "editor.defaultFormatter": "Shopify.ruby-lsp",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.rulers": [
+      120
+    ]
+  },
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "vscode.markdown-language-features"
+  },
+  "rspec.command": "bundle exec rspec",
+  "rspec.format": "documentation",
+  "test.defaultGuttterClickAction": "run"
+}

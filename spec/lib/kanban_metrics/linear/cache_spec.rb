@@ -354,8 +354,12 @@ RSpec.describe KanbanMetrics::Linear::Cache do
       it 'handles file permission errors gracefully' do
         # Arrange
         cache.set(cache_key, test_data)
-        cache_file = File.join(cache_dir, "#{cache_key}.json")
-        File.chmod(0o000, cache_file)
+
+        # Stub the CacheFileManager's read_file method to raise a permission error
+        allow_any_instance_of(KanbanMetrics::Linear::CacheFileManager)
+          .to receive(:read_file)
+          .with(cache_key)
+          .and_raise(Errno::EACCES, 'Permission denied')
 
         # Act
         result = cache.get(cache_key)
@@ -364,7 +368,7 @@ RSpec.describe KanbanMetrics::Linear::Cache do
         expect(result).to be_nil
 
         # Cleanup
-        File.chmod(0o644, cache_file) # Restore permissions for cleanup
+        # (no special cleanup needed since we're using stubs)
       end
     end
   end

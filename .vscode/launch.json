@@ -1,0 +1,19 @@
+{
+  // VS Code Launch Configuration for Linear Kanban Metrics
+  // Note: Ruby debugging configurations require the devcontainer environment
+  // with Ruby debugger extensions installed. Use the devcontainer for full debugging support.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Kanban Metrics (Terminal)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/kanban_metrics",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    }
+  ]
+}

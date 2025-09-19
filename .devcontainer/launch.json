@@ -1,0 +1,55 @@
+{
+  // Ruby debugging configurations for devcontainer environment
+  // These configurations require Ruby debugging extensions to be installed
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Kanban Metrics (Ruby)",
+      "type": "rdbg",
+      "request": "launch",
+      "script": "${workspaceFolder}/bin/kanban_metrics",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "useBundler": true
+    },
+    {
+      "name": "Debug Kanban Metrics with Args (Ruby)",
+      "type": "rdbg",
+      "request": "launch",
+      "script": "${workspaceFolder}/bin/kanban_metrics",
+      "args": [
+        "--format",
+        "json",
+        "--team-metrics"
+      ],
+      "cwd": "${workspaceFolder}",
+      "useBundler": true
+    },
+    {
+      "name": "Debug RSpec Tests (Ruby)",
+      "type": "rdbg",
+      "request": "launch",
+      "script": "rspec",
+      "args": [
+        "${file}"
+      ],
+      "cwd": "${workspaceFolder}",
+      "useBundler": true
+    },
+    {
+      "name": "Debug All RSpec Tests (Ruby)",
+      "type": "rdbg",
+      "request": "launch",
+      "script": "rspec",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "useBundler": true
+    },
+    {
+      "name": "Attach Ruby Debugger",
+      "type": "rdbg",
+      "request": "attach",
+      "localfs": true
+    }
+  ]
+}
