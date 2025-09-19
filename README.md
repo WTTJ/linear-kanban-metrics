@@ -34,15 +34,60 @@ The AI test runner automatically triggers on all pushes and pull requests, analy
 bundle install
 ```
 
-2. Create a `.env` file from the example:
-```bash
-cp config/.env.example config/.env
-```
+2. **Environment Configuration** (Choose one option):
 
-3. Get your Linear API token from [Linear Settings](https://linear.app/settings/api) and add it to your `.env` file:
-```
-LINEAR_API_TOKEN=your_actual_token_here
-```
+   **Option A: 1Password Integration (Recommended)**
+   ```bash
+   # Generate .env from 1Password template
+   ruby scripts/env-handler.rb
+   ```
+   
+   Or use the VS Code task: `Ctrl+Shift+P` → "Tasks: Run Task" → "Generate .env from 1Password"
+   
+   The script will:
+   - Automatically retrieve API keys from 1Password
+   - Generate a complete `.env` file in `config/`
+   - Validate that all required keys are present
+   - Create a backup of any existing `.env` file
+   
+   **Option B: Manual Configuration**
+   ```bash
+   cp config/env.sample config/.env
+   ```
+   
+   Then edit `config/.env` with your actual values:
+   ```bash
+   # Required
+   LINEAR_API_TOKEN=your_actual_token_here
+   
+   # Optional
+   LINEAR_TEAM_ID=your_team_id
+   METRICS_START_DATE=2024-01-01
+   METRICS_END_DATE=2024-12-31
+   ```
+
+3. Get your Linear API token from [Linear Settings](https://linear.app/settings/api)
+
+### 1Password Configuration
+
+If using the 1Password integration, ensure you have:
+
+1. **1Password CLI installed**:
+   ```bash
+   brew install --cask 1password/tap/1password-cli
+   ```
+
+2. **Signed in to 1Password**:
+   ```bash
+   op signin
+   ```
+
+3. **LINEAR_API_TOKEN stored in 1Password** in the `[TEAM] Tech & Product` vault as an item named `LINEAR_API_TOKEN` with the credential field containing your API token.
+
+**Files:**
+- `config/env.1password.template` - Template with 1Password references
+- `scripts/env-handler.rb` - Ruby script to generate `.env` from template
+- `config/env.sample` - Manual configuration example
 
 ## Usage
 
@@ -376,3 +421,64 @@ See the [GitHub Actions workflows](.github/workflows/) for detailed CI/CD config
 5. Push and create a pull request
 
 All pull requests must pass the CI pipeline before merging.
+
+## 🚨 Troubleshooting
+
+### Environment Configuration Issues
+
+**Missing API Token**
+```bash
+# Verify API token is set
+ruby -r dotenv -e "Dotenv.load('config/.env'); puts ENV['LINEAR_API_TOKEN'] ? 'LINEAR_API_TOKEN: SET' : 'LINEAR_API_TOKEN: MISSING'"
+
+# Check if .env file exists
+ls -la config/.env
+```
+
+**1Password Integration Issues**
+```bash
+# Check 1Password CLI installation
+op --version
+
+# Verify 1Password login
+op account list
+
+# Test 1Password item access (adjust vault and item names as needed)
+op item get "LINEAR_API_TOKEN" --vault "Employee" --field credential --reveal
+```
+
+**Permission Issues with Scripts**
+```bash
+# Make sure env-handler.rb is executable
+chmod +x scripts/env-handler.rb
+
+# Test the Ruby script
+ruby scripts/env-handler.rb
+```
+
+**Ruby Script Issues**
+```bash
+# Check Ruby version (should be 2.6+ for this script)
+ruby --version
+
+# Test if required gems are available
+ruby -e "require 'fileutils'; require 'shellwords'; puts 'Ruby dependencies OK'"
+
+# Run with verbose output to debug issues
+DEBUG=true ruby scripts/env-handler.rb
+```
+
+### Performance Issues
+- Check internet connectivity for Linear API calls
+- Verify Linear API rate limits and quotas
+- Use `--no-cache` flag to bypass cache if needed
+- Monitor API response times with `DEBUG=true`
+
+### Cache Issues
+```bash
+# Clear cache if data seems stale
+rm -rf tmp/.linear_cache*
+
+# Check cache directory permissions
+ls -la tmp/
+```

@@ -1,6 +1,6 @@
 .bundle/
 .DS_Store
-config/.env
+config/.env*
 coverage/
 reports/
 tmp/

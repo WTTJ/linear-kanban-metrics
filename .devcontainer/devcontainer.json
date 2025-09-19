@@ -1,3 +1,93 @@
 {
-  "image": "mcr.microsoft.com/devcontainers/ruby:3.3"
+  "image": "mcr.microsoft.com/devcontainers/ruby:3.3",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // Ruby Language Support
+        "shopify.ruby-lsp",
+        "rebornix.ruby",
+        // Testing
+        "connorshea.vscode-ruby-test-adapter",
+        "ms-vscode.test-adapter-converter",
+        // Linting & Code Quality
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.vscode-json",
+        // Git Integration
+        "eamodio.gitlens",
+        "mhutchie.git-graph",
+        // File Management & Navigation
+        "ms-vscode.vscode-file-watcher",
+        "alefragnani.project-manager",
+        // API Development & HTTP
+        "humao.rest-client",
+        "ms-vscode.vscode-json",
+        // Documentation & Markdown
+        "yzhang.markdown-all-in-one",
+        "davidanson.vscode-markdownlint",
+        // CSV Support (for kanban metrics output)
+        "janisdd.vscode-edit-csv",
+        // Docker (for devcontainer support)
+        "ms-azuretools.vscode-docker",
+        // Code Formatting & Utilities
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next",
+        "ms-vscode.hexeditor",
+        // Terminal & Shell
+        "ms-vscode.terminal",
+        // Performance & Coverage
+        "ryanluker.vscode-coverage-gutters"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "chat.promptFilesLocations": {
+          "/home/vscode/prompts": true
+        },
+        "ruby.lsp.enabledFeatures": {
+          "codeActions": true,
+          "diagnostics": true,
+          "documentHighlights": true,
+          "documentLink": true,
+          "documentSymbols": true,
+          "foldingRanges": true,
+          "formatting": true,
+          "hover": true,
+          "inlayHint": true,
+          "onTypeFormatting": true,
+          "selectionRanges": true,
+          "semanticHighlighting": true,
+          "completion": true,
+          "codeLens": true,
+          "definition": true,
+          "workspaceSymbol": true,
+          "signatureHelp": true,
+          "typeHierarchy": true
+        },
+        "ruby.lsp.rubyVersionManager": "auto",
+        "files.associations": {
+          "Gemfile": "ruby",
+          "Rakefile": "ruby",
+          "Guardfile": "ruby",
+          "*.gemspec": "ruby",
+          ".rubocop.yml": "yaml"
+        },
+        "emmet.includeLanguages": {
+          "ruby": "html"
+        },
+        "[ruby]": {
+          "editor.defaultFormatter": "Shopify.ruby-lsp",
+          "editor.formatOnSave": true,
+          "editor.tabSize": 2,
+          "editor.insertSpaces": true,
+          "editor.semanticHighlighting.enabled": true
+        },
+        "[json]": {
+          "editor.defaultFormatter": "vscode.json-language-features"
+        },
+        "[markdown]": {
+          "editor.defaultFormatter": "vscode.markdown-language-features",
+          "editor.wordWrap": "on"
+        }
+      }
+    }
+  }
 }

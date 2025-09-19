@@ -257,6 +257,41 @@
       "detail": "Run full CI pipeline locally (tests, linting, security)"
     },
     {
+      "label": "Run Quality Checks",
+      "type": "shell",
+      "command": "./bin/ci",
+      "args": [
+        "quality"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        {
+          "owner": "rubocop",
+          "fileLocation": "relative",
+          "pattern": {
+            "regexp": "^([^:]+):(\\d+):(\\d+): ([CWE]): (.*)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "severity": 4,
+            "message": 5
+          }
+        }
+      ],
+      "detail": "Run comprehensive quality analysis (RuboCop, Brakeman, tests with coverage)"
+    },
+    {
       "label": "Clean Coverage Reports",
       "type": "shell",
       "command": "rm",
@@ -299,6 +334,27 @@
         "cwd": "${workspaceFolder}"
       },
       "detail": "Clean up temporary files and cache"
+    },
+    {
+      "label": "Generate .env from 1Password",
+      "type": "shell",
+      "command": "ruby",
+      "args": [
+        "scripts/env-handler.rb"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Generate .env file from 1Password template using env-handler.rb"
     }
   ]
 }
