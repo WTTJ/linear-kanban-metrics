@@ -1,40 +1,29 @@
 {
   "image": "mcr.microsoft.com/devcontainers/ruby:3.3",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true
+    }
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/dev/WTTJ/prompts,target=/home/vscode/prompts,type=bind,consistency=cached"
+  ],
+  "postCreateCommand": ".devcontainer/setup.sh",
   "customizations": {
     "vscode": {
       "extensions": [
-        // Ruby Language Support
         "shopify.ruby-lsp",
-        "rebornix.ruby",
-        // Testing
         "connorshea.vscode-ruby-test-adapter",
-        "ms-vscode.test-adapter-converter",
-        // Linting & Code Quality
-        "bradlc.vscode-tailwindcss",
         "ms-vscode.vscode-json",
-        // Git Integration
         "eamodio.gitlens",
         "mhutchie.git-graph",
-        // File Management & Navigation
-        "ms-vscode.vscode-file-watcher",
         "alefragnani.project-manager",
-        // API Development & HTTP
         "humao.rest-client",
-        "ms-vscode.vscode-json",
-        // Documentation & Markdown
         "yzhang.markdown-all-in-one",
         "davidanson.vscode-markdownlint",
-        // CSV Support (for kanban metrics output)
         "janisdd.vscode-edit-csv",
-        // Docker (for devcontainer support)
         "ms-azuretools.vscode-docker",
-        // Code Formatting & Utilities
         "esbenp.prettier-vscode",
-        "ms-vscode.vscode-typescript-next",
-        "ms-vscode.hexeditor",
-        // Terminal & Shell
-        "ms-vscode.terminal",
-        // Performance & Coverage
         "ryanluker.vscode-coverage-gutters"
       ],
       "settings": {
