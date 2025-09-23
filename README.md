@@ -39,7 +39,7 @@ bundle install
    **Option A: 1Password Integration (Recommended)**
    ```bash
    # Generate .env from 1Password template
-   ruby scripts/env-handler.rb
+   ruby scripts/env-handler.sh
    ```
    
    Or use the VS Code task: `Ctrl+Shift+P` → "Tasks: Run Task" → "Generate .env from 1Password"
@@ -86,7 +86,7 @@ If using the 1Password integration, ensure you have:
 
 **Files:**
 - `config/env.1password.template` - Template with 1Password references
-- `scripts/env-handler.rb` - Ruby script to generate `.env` from template
+- `scripts/env-handler.sh` - Ruby script to generate `.env` from template
 - `config/env.sample` - Manual configuration example
 
 ## Usage
@@ -449,11 +449,11 @@ op item get "LINEAR_API_TOKEN" --vault "Employee" --field credential --reveal
 
 **Permission Issues with Scripts**
 ```bash
-# Make sure env-handler.rb is executable
-chmod +x scripts/env-handler.rb
+# Make sure env-handler.sh is executable
+chmod +x scripts/env-handler.sh
 
 # Test the Ruby script
-ruby scripts/env-handler.rb
+ruby scripts/env-handler.sh
 ```
 
 **Ruby Script Issues**
@@ -465,7 +465,7 @@ ruby --version
 ruby -e "require 'fileutils'; require 'shellwords'; puts 'Ruby dependencies OK'"
 
 # Run with verbose output to debug issues
-DEBUG=true ruby scripts/env-handler.rb
+DEBUG=true ruby scripts/env-handler.sh
 ```
 
 ### Performance Issues

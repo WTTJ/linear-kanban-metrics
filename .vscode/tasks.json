@@ -338,9 +338,28 @@
     {
       "label": "Generate .env from 1Password",
       "type": "shell",
-      "command": "ruby",
+      "command": "./bin/env-handler",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Generate .env file from 1Password template"
+    },
+    {
+      "label": "Generate .env (Preview)",
+      "type": "shell",
+      "command": "./bin/env-handler",
       "args": [
-        "scripts/env-handler.rb"
+        "--dry-run",
+        "--verbose"
       ],
       "group": "build",
       "presentation": {
@@ -354,7 +373,63 @@
       "options": {
         "cwd": "${workspaceFolder}"
       },
-      "detail": "Generate .env file from 1Password template using env-handler.rb"
+      "detail": "Preview .env generation without making changes (safe)"
+    },
+    {
+      "label": "Validate Shell Scripts",
+      "type": "shell",
+      "command": "shellcheck",
+      "args": [
+        "scripts/*.sh",
+        "bin/env-handler"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": {
+        "owner": "shellcheck",
+        "fileLocation": "relative",
+        "pattern": {
+          "regexp": "^(.*):(\\d+):(\\d+): (warning|error|info|style): (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      },
+      "detail": "Run shellcheck on all shell scripts for best practices validation"
+    },
+    {
+      "label": "Setup Development Environment",
+      "type": "shell",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Bundle Install",
+        "Generate .env from 1Password"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "detail": "Complete development environment setup: install dependencies and generate .env"
     }
   ]
 }
