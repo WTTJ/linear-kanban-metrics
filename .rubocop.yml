@@ -63,6 +63,13 @@ Metrics/ClassLength:
   Max: 160
   Exclude:
     - 'lib/kanban_metrics/formatters/table_formatter.rb'  # Table formatting requires many methods
+    - 'lib/kanban_metrics/formatters/markdown_formatter.rb'  # Markdown formatting requires many methods
+
+Metrics/ParameterLists:
+  MaxOptionalParameters: 5
+  Exclude:
+    - 'lib/kanban_metrics/formatters/**/*'  # Formatters need multiple optional data sources
+    - 'lib/kanban_metrics/reports/kanban_report.rb'  # Report class needs multiple optional parameters
 
 Metrics/AbcSize:
   Max: 30

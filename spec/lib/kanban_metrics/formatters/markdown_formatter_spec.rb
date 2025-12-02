@@ -84,7 +84,7 @@ RSpec.describe KanbanMetrics::Formatters::MarkdownFormatter do
 
   let(:sample_timeseries) do
     instance_double(KanbanMetrics::Timeseries::TicketTimeseries,
-                    status_flow_analysis: { %w[Todo In\ Progress] => 15, ['In Progress', 'Done'] => 12 },
+                    status_flow_analysis: { ['Todo', 'In Progress'] => 15, ['In Progress', 'Done'] => 12 },
                     average_time_in_status: { 'Todo' => 3.2, 'In Progress' => 5.8, 'Done' => 0.1 },
                     daily_status_counts: { Date.today => { 'completed' => 3, 'started' => 2 } })
   end

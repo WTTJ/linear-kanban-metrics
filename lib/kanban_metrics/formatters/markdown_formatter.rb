@@ -229,14 +229,24 @@ module KanbanMetrics
 
       def build_team_comparison_section
         header = "### 📊 Team Comparison\n\n"
-        table_header = "| Team | Total | Completed | In Progress | Backlog | Avg Cycle | Median Cycle | Avg Lead | Median Lead | Throughput |\n"
-        table_separator = "|------|-------|-----------|-------------|---------|-----------|--------------|----------|-------------|------------|\n"
+        table_header = team_comparison_table_header
+        table_separator = team_comparison_separator
 
         rows = team_metrics.sort.map do |team, stats|
           build_comparison_row(team, stats)
         end
 
         header + table_header + table_separator + rows.join
+      end
+
+      def team_comparison_table_header
+        '| Team | Total | Completed | In Progress | Backlog | ' \
+          "Avg Cycle | Median Cycle | Avg Lead | Median Lead | Throughput |\n"
+      end
+
+      def team_comparison_separator
+        '|------|-------|-----------|-------------|---------|' \
+          "-----------|--------------|----------|-------------|------------|\n"
       end
 
       def build_comparison_row(name, stats)
@@ -294,14 +304,24 @@ module KanbanMetrics
 
       def build_teammate_comparison_section
         header = "### 📊 Teammate Comparison\n\n"
-        table_header = "| Teammate | Total | Completed | In Progress | Backlog | Avg Cycle | Median Cycle | Avg Lead | Median Lead | Throughput |\n"
-        table_separator = "|----------|-------|-----------|-------------|---------|-----------|--------------|----------|-------------|------------|\n"
+        table_header = teammate_comparison_table_header
+        table_separator = teammate_comparison_separator
 
         rows = teammate_metrics.sort.map do |teammate, stats|
           build_comparison_row(teammate, stats)
         end
 
         header + table_header + table_separator + rows.join
+      end
+
+      def teammate_comparison_table_header
+        '| Teammate | Total | Completed | In Progress | Backlog | ' \
+          "Avg Cycle | Median Cycle | Avg Lead | Median Lead | Throughput |\n"
+      end
+
+      def teammate_comparison_separator
+        '|----------|-------|-----------|-------------|---------|' \
+          "-----------|--------------|----------|-------------|------------|\n"
       end
 
       # Timeseries section
