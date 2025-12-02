@@ -10,6 +10,9 @@ module KanbanMetrics
       # Default team name for issues without team information
       DEFAULT_TEAM_NAME = 'Unknown Team'
 
+      # Default assignee name for unassigned issues
+      DEFAULT_ASSIGNEE_NAME = 'Unassigned'
+
       # Initialize calculator with issue data
       #
       # @param issues [Array] Collection of issue data (raw hashes or Domain::Issue objects)
@@ -36,6 +39,16 @@ module KanbanMetrics
         team_groups.transform_values { |team_issues| calculate_metrics_for_issues(team_issues) }
       end
 
+      # Calculate metrics grouped by assignee (teammate)
+      #
+      # @return [Hash] Assignee names as keys, metrics as values
+      def teammate_metrics
+        return {} if @issues.empty?
+
+        teammate_groups = group_issues_by_assignee
+        teammate_groups.transform_values { |assignee_issues| calculate_metrics_for_issues(assignee_issues) }
+      end
+
       private
 
       # Convert input to Domain::Issue objects
@@ -53,6 +66,13 @@ module KanbanMetrics
       # @return [Hash] Team names as keys, arrays of issues as values
       def group_issues_by_team
         @issues.group_by { |issue| issue.team_name || DEFAULT_TEAM_NAME }
+      end
+
+      # Group issues by assignee name
+      #
+      # @return [Hash] Assignee names as keys, arrays of issues as values
+      def group_issues_by_assignee
+        @issues.group_by { |issue| issue.assignee_name || DEFAULT_ASSIGNEE_NAME }
       end
 
       # Calculate metrics for a collection of issues

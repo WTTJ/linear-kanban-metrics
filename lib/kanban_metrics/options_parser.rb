@@ -32,7 +32,7 @@ module KanbanMetrics
     end
 
     private_class_method def self.add_output_options(opts, options)
-      opts.on('--format FORMAT', 'Output format (table, json, csv)') { |format| options[:format] = format }
+      opts.on('--format FORMAT', 'Output format (table, json, csv, markdown)') { |format| options[:format] = format }
       opts.on('--page-size SIZE', Integer, 'Number of issues per page (max: 250, default: 250)') do |size|
         options[:page_size] = size
       end
@@ -41,6 +41,7 @@ module KanbanMetrics
     private_class_method def self.add_feature_options(opts, options)
       opts.on('--no-cache', 'Disable API response caching') { options[:no_cache] = true }
       opts.on('--team-metrics', 'Include team-based metrics breakdown') { options[:team_metrics] = true }
+      opts.on('--teammate-metrics', 'Include teammate/assignee-based metrics breakdown') { options[:teammate_metrics] = true }
       opts.on('--timeseries', 'Include timeseries analysis') { options[:timeseries] = true }
       opts.on('--timeline ISSUE_ID', 'Show detailed timeline for specific issue') { |id| options[:timeline] = id }
       opts.on('--include-archived', 'Include archived tickets in the analysis') { options[:include_archived] = true }
@@ -73,6 +74,7 @@ module KanbanMetrics
       options[:page_size] ||= 250
       options[:no_cache] = false if options[:no_cache].nil?
       options[:team_metrics] = false if options[:team_metrics].nil?
+      options[:teammate_metrics] = false if options[:teammate_metrics].nil?
       options[:timeseries] = false if options[:timeseries].nil?
       options[:include_archived] = false if options[:include_archived].nil?
       options[:ticket_details] = false if options[:ticket_details].nil?
@@ -91,7 +93,7 @@ module KanbanMetrics
     end
 
     private_class_method def self.validate_format(options)
-      valid_formats = %w[table json csv]
+      valid_formats = %w[table json csv markdown]
       return if valid_formats.include?(options[:format])
 
       puts "⚠️  Warning: Invalid format '#{options[:format]}'. Using 'table' instead."

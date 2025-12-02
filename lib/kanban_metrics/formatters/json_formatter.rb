@@ -18,25 +18,28 @@ module KanbanMetrics
       #
       # @param metrics [Hash] Overall metrics data
       # @param team_metrics [Hash, nil] Team-specific metrics
+      # @param teammate_metrics [Hash, nil] Teammate/assignee-specific metrics
       # @param timeseries [Object, nil] Timeseries analysis object
       # @param issues [Array, nil] Array of issues for individual ticket data
       # @return [String] Generated JSON content
-      def self.generate(metrics, team_metrics: nil, timeseries: nil, issues: nil)
-        new(metrics, team_metrics, timeseries, issues).generate
+      def self.generate(metrics, team_metrics: nil, teammate_metrics: nil, timeseries: nil, issues: nil)
+        new(metrics, team_metrics, teammate_metrics, timeseries, issues).generate
       end
 
       # Initialize with metrics data
       #
       # @param metrics [Hash] Overall metrics data
       # @param team_metrics [Hash, nil] Team-specific metrics
+      # @param teammate_metrics [Hash, nil] Teammate/assignee-specific metrics
       # @param timeseries [Object, nil] Timeseries analysis object
       # @param issues [Array, nil] Array of issues for individual ticket data
       # @raise [ArgumentError] if metrics is nil or invalid
-      def initialize(metrics, team_metrics = nil, timeseries = nil, issues = nil)
+      def initialize(metrics, team_metrics = nil, teammate_metrics = nil, timeseries = nil, issues = nil)
         validate_metrics(metrics)
 
         @metrics = metrics
         @team_metrics = team_metrics
+        @teammate_metrics = teammate_metrics
         @timeseries = timeseries
         @issues = Array(issues) # Ensure it's always an array
       end
@@ -57,7 +60,7 @@ module KanbanMetrics
 
       private
 
-      attr_reader :metrics, :team_metrics, :timeseries, :issues
+      attr_reader :metrics, :team_metrics, :teammate_metrics, :timeseries, :issues
 
       # Input validation
 
@@ -78,6 +81,7 @@ module KanbanMetrics
         output = { overall_metrics: metrics }
 
         add_team_metrics(output) if should_include_team_metrics?
+        add_teammate_metrics(output) if should_include_teammate_metrics?
         add_timeseries_data(output) if should_include_timeseries?
         add_individual_tickets(output) if should_include_individual_tickets?
 
@@ -89,6 +93,11 @@ module KanbanMetrics
       # @return [Boolean] True if team metrics should be included
       def should_include_team_metrics?
         team_metrics.is_a?(Hash) && !team_metrics.empty?
+      end
+
+      # @return [Boolean] True if teammate metrics should be included
+      def should_include_teammate_metrics?
+        teammate_metrics.is_a?(Hash) && !teammate_metrics.empty?
       end
 
       # @return [Boolean] True if timeseries data should be included
@@ -111,6 +120,16 @@ module KanbanMetrics
       rescue StandardError => e
         log_warning("Failed to add team metrics: #{e.message}")
         output[:team_metrics] = {}
+      end
+
+      # Add teammate metrics to output
+      #
+      # @param output [Hash] Output structure to modify
+      def add_teammate_metrics(output)
+        output[:teammate_metrics] = teammate_metrics
+      rescue StandardError => e
+        log_warning("Failed to add teammate metrics: #{e.message}")
+        output[:teammate_metrics] = {}
       end
 
       # Add timeseries data to output

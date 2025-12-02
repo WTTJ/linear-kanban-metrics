@@ -36,13 +36,15 @@ module KanbanMetrics
       #
       # @param metrics [Hash] Overall metrics data
       # @param team_metrics [Hash, nil] Team-specific metrics
+      # @param teammate_metrics [Hash, nil] Teammate/assignee-specific metrics
       # @param issues [Array, nil] Array of issues for individual ticket data
       # @raise [ArgumentError] if metrics is nil or invalid
-      def initialize(metrics, team_metrics = nil, issues = nil)
+      def initialize(metrics, team_metrics = nil, teammate_metrics = nil, issues = nil)
         validate_metrics(metrics)
 
         @metrics = metrics
         @team_metrics = team_metrics
+        @teammate_metrics = teammate_metrics
         @issues = Array(issues) # Ensure it's always an array
       end
 
@@ -50,14 +52,16 @@ module KanbanMetrics
       #
       # @param metrics [Hash] Overall metrics data
       # @param team_metrics [Hash, nil] Team-specific metrics
+      # @param teammate_metrics [Hash, nil] Teammate/assignee-specific metrics
       # @param issues [Array, nil] Array of issues for individual ticket data
-      def self.print_all(metrics, team_metrics: nil, issues: nil)
-        formatter = new(metrics, team_metrics, issues)
+      def self.print_all(metrics, team_metrics: nil, teammate_metrics: nil, issues: nil)
+        formatter = new(metrics, team_metrics, teammate_metrics, issues)
         formatter.print_summary
         formatter.print_cycle_time
         formatter.print_lead_time
         formatter.print_throughput
         formatter.print_team_metrics if team_metrics
+        formatter.print_teammate_metrics if teammate_metrics
         formatter.print_individual_tickets if issues&.any?
         formatter.print_kpi_definitions
       end
@@ -113,6 +117,17 @@ module KanbanMetrics
         puts "\n❌ Error displaying team metrics"
       end
 
+      # Print teammate metrics (individual and comparison)
+      def print_teammate_metrics
+        return unless teammate_metrics_available?
+
+        print_individual_teammates
+        print_teammate_comparison
+      rescue StandardError => e
+        log_error("Failed to print teammate metrics: #{e.message}")
+        puts "\n❌ Error displaying teammate metrics"
+      end
+
       # Print KPI definitions table
       def print_kpi_definitions
         table = build_definitions_table
@@ -139,7 +154,7 @@ module KanbanMetrics
 
       private
 
-      attr_reader :metrics, :team_metrics, :issues
+      attr_reader :metrics, :team_metrics, :teammate_metrics, :issues
 
       # Input validation
 
@@ -156,6 +171,11 @@ module KanbanMetrics
       # @return [Boolean] True if team metrics should be displayed
       def team_metrics_available?
         team_metrics.is_a?(Hash) && !team_metrics.empty?
+      end
+
+      # @return [Boolean] True if teammate metrics should be displayed
+      def teammate_metrics_available?
+        teammate_metrics.is_a?(Hash) && !teammate_metrics.empty?
       end
 
       # @return [Boolean] True if individual tickets should be displayed
@@ -303,6 +323,85 @@ module KanbanMetrics
         puts "\n📊 TEAM COMPARISON"
         table = build_team_comparison_table
         puts table
+      end
+
+      # Teammate metrics methods
+
+      # Print individual teammate metrics
+      def print_individual_teammates
+        puts "\n👤 TEAMMATE METRICS"
+        puts '=' * 80
+
+        sorted_teammates = teammate_metrics.sort
+        sorted_teammates.each do |teammate, stats|
+          print_individual_teammate(teammate, stats)
+        end
+      end
+
+      # Print metrics for a single teammate
+      #
+      # @param teammate [String] Teammate/assignee name
+      # @param stats [Hash] Teammate statistics
+      def print_individual_teammate(teammate, stats)
+        puts "\n🧑‍💻 #{teammate.upcase}"
+        table = build_team_table(stats) # Reuse team table structure
+        puts table
+      rescue StandardError => e
+        log_warning("Failed to display metrics for teammate '#{teammate}': #{e.message}")
+        puts "\n❌ Error displaying metrics for teammate '#{teammate}'"
+      end
+
+      # Print teammate comparison table
+      def print_teammate_comparison
+        puts "\n📊 TEAMMATE COMPARISON"
+        table = build_teammate_comparison_table
+        puts table
+      end
+
+      # Build teammate comparison table
+      #
+      # @return [Terminal::Table] Teammate comparison table
+      def build_teammate_comparison_table
+        Terminal::Table.new do |tab|
+          tab.headings = [
+            'Teammate', 'Total', 'Completed', 'In Progress', 'Backlog',
+            'Avg Cycle', 'Median Cycle', 'Avg Lead', 'Median Lead', 'Throughput'
+          ]
+          add_teammate_comparison_rows(tab)
+        end
+      end
+
+      # Add teammate comparison rows to table
+      #
+      # @param tab [Terminal::Table] Table to modify
+      def add_teammate_comparison_rows(tab)
+        sorted_teammates = teammate_metrics.sort
+        sorted_teammates.each do |teammate, stats|
+          add_teammate_comparison_row(tab, teammate, stats)
+        end
+      end
+
+      # Add single teammate comparison row
+      #
+      # @param tab [Terminal::Table] Table to modify
+      # @param teammate [String] Teammate/assignee name
+      # @param stats [Hash] Teammate statistics
+      def add_teammate_comparison_row(tab, teammate, stats)
+        tab.add_row [
+          teammate,
+          safe_fetch_nested(stats, :total_issues) || 'N/A',
+          safe_fetch_nested(stats, :completed_issues) || 'N/A',
+          safe_fetch_nested(stats, :in_progress_issues) || 'N/A',
+          safe_fetch_nested(stats, :backlog_issues) || 'N/A',
+          safe_fetch_nested(stats, :cycle_time, :average) || 'N/A',
+          safe_fetch_nested(stats, :cycle_time, :median) || 'N/A',
+          safe_fetch_nested(stats, :lead_time, :average) || 'N/A',
+          safe_fetch_nested(stats, :lead_time, :median) || 'N/A',
+          safe_fetch_nested(stats, :throughput) || 'N/A'
+        ]
+      rescue StandardError => e
+        log_warning("Failed to add comparison row for teammate '#{teammate}': #{e.message}")
+        tab.add_row [teammate] + (['Error'] * 9)
       end
 
       # Build metrics table for a single team

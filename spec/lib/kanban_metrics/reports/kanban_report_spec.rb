@@ -3,7 +3,7 @@
 require 'spec_helper'
 
 RSpec.describe KanbanMetrics::Reports::KanbanReport do
-  subject(:report) { described_class.new(metrics, team_metrics, timeseries_data) }
+  subject(:report) { described_class.new(metrics, team_metrics, teammate_metrics, timeseries_data) }
 
   # Shared test data
   let(:sample_metrics) do
@@ -29,6 +29,9 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
       allow(mock).to receive_messages(status_flow_analysis: {}, average_time_in_status: {}, daily_status_counts: {})
     end
   end
+
+  # Default teammate_metrics for all tests (can be overridden in specific contexts)
+  let(:teammate_metrics) { nil }
 
   describe '#initialize' do
     context 'with metrics only' do
@@ -82,7 +85,7 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
       it 'uses JsonFormatter and outputs JSON to stdout' do
         # Given: A report with all data and a mocked JSON formatter
         allow(KanbanMetrics::Formatters::JsonFormatter).to receive(:new)
-          .with(sample_metrics, sample_team_metrics, sample_timeseries, nil)
+          .with(sample_metrics, sample_team_metrics, nil, sample_timeseries, nil)
           .and_return(mock_json_formatter)
         allow(mock_json_formatter).to receive(:generate).and_return(expected_json)
 
@@ -104,7 +107,7 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
       it 'uses CsvFormatter and outputs CSV to stdout' do
         # Given: A report with all data and a mocked CSV formatter
         allow(KanbanMetrics::Formatters::CsvFormatter).to receive(:new)
-          .with(sample_metrics, sample_team_metrics, sample_timeseries, nil)
+          .with(sample_metrics, sample_team_metrics, nil, sample_timeseries, nil)
           .and_return(mock_csv_formatter)
         allow(mock_csv_formatter).to receive(:generate).and_return(expected_csv)
 
@@ -118,10 +121,10 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
       it 'passes issues to CsvFormatter when provided' do
         # Given: A report with all data including issues
         issues_data = [{ 'id' => 'test-issue', 'title' => 'Test Issue' }]
-        report_with_issues = described_class.new(sample_metrics, sample_team_metrics, sample_timeseries, issues_data)
+        report_with_issues = described_class.new(sample_metrics, sample_team_metrics, nil, sample_timeseries, issues_data)
 
         allow(KanbanMetrics::Formatters::CsvFormatter).to receive(:new)
-          .with(sample_metrics, sample_team_metrics, sample_timeseries, issues_data)
+          .with(sample_metrics, sample_team_metrics, nil, sample_timeseries, issues_data)
           .and_return(mock_csv_formatter)
         allow(mock_csv_formatter).to receive(:generate).and_return(expected_csv)
 
@@ -142,7 +145,7 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
       before do
         # Setup table formatter mock
         allow(KanbanMetrics::Formatters::TableFormatter).to receive(:new)
-          .with(sample_metrics, sample_team_metrics, nil)
+          .with(sample_metrics, sample_team_metrics, nil, nil)
           .and_return(mock_table_formatter)
         setup_table_formatter_stubs
       end
@@ -264,7 +267,7 @@ RSpec.describe KanbanMetrics::Reports::KanbanReport do
 
       before do
         allow(KanbanMetrics::Formatters::TableFormatter).to receive(:new)
-          .with(sample_metrics, nil, nil)
+          .with(sample_metrics, nil, nil, nil)
           .and_return(mock_table_formatter)
         setup_table_formatter_stubs
       end

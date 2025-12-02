@@ -248,6 +248,62 @@ module KanbanMetrics
       end
     end
 
+    # Generator for teammate metrics section
+    class TeammateMetricsGenerator < BaseSectionGenerator
+      HEADERS = [
+        'Teammate', 'Total Issues', 'Completed Issues', 'In Progress Issues', 'Backlog Issues',
+        'Avg Cycle Time', 'Median Cycle Time', 'Avg Lead Time', 'Median Lead Time', 'Throughput'
+      ].freeze
+
+      def generate(csv)
+        add_section_separator(csv, 'TEAMMATE METRICS')
+        csv << HEADERS
+
+        sorted_teammates.each do |teammate_name, teammate_stats|
+          add_teammate_row(csv, teammate_name, teammate_stats)
+        end
+      end
+
+      private
+
+      def sorted_teammates
+        data.sort_by { |teammate_name, _| teammate_name.to_s }
+      end
+
+      def add_teammate_row(csv, teammate_name, teammate_stats)
+        row_data = build_teammate_row_data(teammate_name, teammate_stats)
+        csv << row_data.map { |value| format_metric_value(value) }
+      rescue StandardError => e
+        log_warning("Failed to add teammate row for '#{teammate_name}': #{e.message}")
+        csv << ([teammate_name] + (['N/A'] * (HEADERS.length - 1)))
+      end
+
+      def build_teammate_row_data(teammate_name, teammate_stats)
+        [
+          teammate_name,
+          safe_fetch_nested(teammate_stats, :total_issues),
+          safe_fetch_nested(teammate_stats, :completed_issues),
+          safe_fetch_nested(teammate_stats, :in_progress_issues),
+          safe_fetch_nested(teammate_stats, :backlog_issues),
+          safe_fetch_nested(teammate_stats, :cycle_time, :average),
+          safe_fetch_nested(teammate_stats, :cycle_time, :median),
+          safe_fetch_nested(teammate_stats, :lead_time, :average),
+          safe_fetch_nested(teammate_stats, :lead_time, :median),
+          extract_throughput_value(teammate_stats)
+        ]
+      end
+
+      def extract_throughput_value(teammate_stats)
+        throughput_data = safe_fetch_nested(teammate_stats, :throughput)
+
+        # If throughput is a hash with weekly_avg and total_completed, prefer total_completed
+        return throughput_data[:total_completed] || throughput_data[:weekly_avg] if throughput_data.is_a?(Hash)
+
+        # If throughput is a direct numeric value
+        throughput_data
+      end
+    end
+
     # Generator for timeseries analysis section
     class TimeseriesGenerator < BaseSectionGenerator
       def generate(csv)
@@ -347,6 +403,7 @@ module KanbanMetrics
     # Provides comprehensive CSV export functionality including:
     # - Overall metrics summary
     # - Team-specific metrics breakdown
+    # - Teammate-specific metrics breakdown
     # - Timeseries analysis data
     # - Individual ticket details
     # - Robust error handling and data validation
@@ -359,24 +416,26 @@ module KanbanMetrics
       #
       # @param metrics [Hash] Overall metrics data
       # @param team_metrics [Hash, nil] Team-specific metrics
+      # @param teammate_metrics [Hash, nil] Teammate/assignee-specific metrics
       # @param timeseries [Object, nil] Timeseries analysis object
       # @param issues [Array, nil] Array of issues for individual ticket data
       # @return [String] Generated CSV content
-      def self.generate(metrics, team_metrics: nil, timeseries: nil, issues: nil)
-        new(metrics, team_metrics, timeseries, issues).generate
+      def self.generate(metrics, team_metrics: nil, teammate_metrics: nil, timeseries: nil, issues: nil)
+        new(metrics, team_metrics, teammate_metrics, timeseries, issues).generate
       end
 
       # Initialize with metrics data
       #
       # @param metrics [Hash] Overall metrics data
       # @param team_metrics [Hash, nil] Team-specific metrics
+      # @param teammate_metrics [Hash, nil] Teammate/assignee-specific metrics
       # @param timeseries [Object, nil] Timeseries analysis object
       # @param issues [Array, nil] Array of issues for individual ticket data
       # @raise [ArgumentError] if metrics is nil or invalid
-      def initialize(metrics, team_metrics = nil, timeseries = nil, issues = nil)
+      def initialize(metrics, team_metrics = nil, teammate_metrics = nil, timeseries = nil, issues = nil)
         validate_metrics(metrics)
 
-        @section_generators = build_section_generators(metrics, team_metrics, timeseries, issues)
+        @section_generators = build_section_generators(metrics, team_metrics, teammate_metrics, timeseries, issues)
       end
 
       # Generate CSV content
@@ -405,13 +464,15 @@ module KanbanMetrics
       #
       # @param metrics [Hash] Overall metrics data
       # @param team_metrics [Hash, nil] Team-specific metrics
+      # @param teammate_metrics [Hash, nil] Teammate/assignee-specific metrics
       # @param timeseries [Object, nil] Timeseries analysis object
       # @param issues [Array, nil] Array of issues for individual ticket data
       # @return [Array<SectionGenerator>] Array of section generators
-      def build_section_generators(metrics, team_metrics, timeseries, issues)
+      def build_section_generators(metrics, team_metrics, teammate_metrics, timeseries, issues)
         generators = [OverallMetricsGenerator.new(metrics)]
 
         generators << TeamMetricsGenerator.new(team_metrics) if should_include_team_metrics?(team_metrics)
+        generators << TeammateMetricsGenerator.new(teammate_metrics) if should_include_teammate_metrics?(teammate_metrics)
         generators << TimeseriesGenerator.new(timeseries) if should_include_timeseries?(timeseries)
         generators << TicketsGenerator.new(issues) if should_include_individual_tickets?(issues)
 
@@ -422,6 +483,12 @@ module KanbanMetrics
       # @return [Boolean] True if team metrics should be included
       def should_include_team_metrics?(team_metrics)
         team_metrics.is_a?(Hash) && !team_metrics.empty?
+      end
+
+      # @param teammate_metrics [Hash, nil] Teammate-specific metrics
+      # @return [Boolean] True if teammate metrics should be included
+      def should_include_teammate_metrics?(teammate_metrics)
+        teammate_metrics.is_a?(Hash) && !teammate_metrics.empty?
       end
 
       # @param timeseries [Object, nil] Timeseries analysis object

@@ -4,7 +4,7 @@ require 'spec_helper'
 
 RSpec.describe KanbanMetrics::Formatters::TableFormatter do
   # Test Data Setup
-  subject(:formatter) { described_class.new(metrics_param, team_metrics_param, issues_param) }
+  subject(:formatter) { described_class.new(metrics_param, team_metrics_param, teammate_metrics_param, issues_param) }
 
   let(:metrics) do
     {
@@ -76,8 +76,11 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
     ]
   end
 
+  # Default teammate_metrics_param for all tests (can be overridden in specific contexts)
+  let(:teammate_metrics_param) { nil }
+
   describe '.print_all' do
-    subject(:print_all) { described_class.print_all(metrics, team_metrics: team_metrics, issues: sample_issues) }
+    subject(:print_all) { described_class.print_all(metrics, team_metrics: team_metrics, teammate_metrics: nil, issues: sample_issues) }
 
     it 'prints all sections without errors' do
       # Execute & Verify
@@ -597,7 +600,7 @@ RSpec.describe KanbanMetrics::Formatters::TableFormatter do
         'team' => { 'name' => 'Test Team' }
       }]
 
-      formatter_with_long_title = described_class.new(metrics, nil, long_title_issue)
+      formatter_with_long_title = described_class.new(metrics, nil, nil, long_title_issue)
 
       # Execute
       output = capture_stdout { formatter_with_long_title.print_individual_tickets }

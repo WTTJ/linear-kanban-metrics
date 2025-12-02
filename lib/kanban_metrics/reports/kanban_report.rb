@@ -4,17 +4,22 @@ module KanbanMetrics
   module Reports
     # Value object to encapsulate report data
     class ReportData
-      attr_reader :metrics, :team_metrics, :timeseries, :issues
+      attr_reader :metrics, :team_metrics, :teammate_metrics, :timeseries, :issues
 
-      def initialize(metrics:, team_metrics: nil, timeseries: nil, issues: nil)
+      def initialize(metrics:, team_metrics: nil, teammate_metrics: nil, timeseries: nil, issues: nil)
         @metrics = metrics
         @team_metrics = team_metrics
+        @teammate_metrics = teammate_metrics
         @timeseries = timeseries
         @issues = issues
       end
 
       def has_team_metrics?
         !@team_metrics.nil?
+      end
+
+      def has_teammate_metrics?
+        !@teammate_metrics.nil?
       end
 
       def has_timeseries?
@@ -34,6 +39,8 @@ module KanbanMetrics
           JsonFormatStrategy.new
         when 'csv'
           CsvFormatStrategy.new
+        when 'markdown'
+          MarkdownFormatStrategy.new
         else
           TableFormatStrategy.new
         end
@@ -46,6 +53,7 @@ module KanbanMetrics
         content = Formatters::JsonFormatter.new(
           report_data.metrics,
           report_data.team_metrics,
+          report_data.teammate_metrics,
           report_data.timeseries,
           report_data.issues
         ).generate
@@ -59,6 +67,21 @@ module KanbanMetrics
         content = Formatters::CsvFormatter.new(
           report_data.metrics,
           report_data.team_metrics,
+          report_data.teammate_metrics,
+          report_data.timeseries,
+          report_data.issues
+        ).generate
+        puts content
+      end
+    end
+
+    # Markdown output strategy
+    class MarkdownFormatStrategy
+      def display(report_data)
+        content = Formatters::MarkdownFormatter.new(
+          report_data.metrics,
+          report_data.team_metrics,
+          report_data.teammate_metrics,
           report_data.timeseries,
           report_data.issues
         ).generate
@@ -83,6 +106,7 @@ module KanbanMetrics
         formatter.print_lead_time
         formatter.print_throughput
         formatter.print_team_metrics if report_data.has_team_metrics?
+        formatter.print_teammate_metrics if report_data.has_teammate_metrics?
         formatter.print_individual_tickets if report_data.has_issues?
         formatter.print_kpi_definitions
       end
@@ -95,6 +119,7 @@ module KanbanMetrics
         Formatters::TableFormatter.new(
           report_data.metrics,
           report_data.team_metrics,
+          report_data.teammate_metrics,
           report_data.issues
         )
       end
@@ -110,10 +135,11 @@ module KanbanMetrics
 
     # Main report coordination class
     class KanbanReport
-      def initialize(metrics, team_metrics = nil, timeseries = nil, issues = nil)
+      def initialize(metrics, team_metrics = nil, teammate_metrics = nil, timeseries = nil, issues = nil)
         @report_data = ReportData.new(
           metrics: metrics,
           team_metrics: team_metrics,
+          teammate_metrics: teammate_metrics,
           timeseries: timeseries,
           issues: issues
         )

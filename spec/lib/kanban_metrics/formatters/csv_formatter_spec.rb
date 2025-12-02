@@ -4,7 +4,11 @@ require 'spec_helper'
 
 RSpec.describe KanbanMetrics::Formatters::CsvFormatter do
   # Test Data Setup
-  subject(:formatter) { described_class.new(metrics_param, team_metrics_param, timeseries_param) }
+  subject(:formatter) { described_class.new(metrics_param, team_metrics_param, teammate_metrics_param, timeseries_param, issues_param) }
+
+  # Default teammate_metrics_param for all tests (can be overridden in specific contexts)
+  let(:teammate_metrics_param) { nil }
+  let(:issues_param) { nil }
 
   let(:metrics) do
     {
@@ -224,7 +228,7 @@ RSpec.describe KanbanMetrics::Formatters::CsvFormatter do
     end
 
     context 'with timeseries data' do
-      let(:formatter) { described_class.new(metrics, nil, timeseries) }
+      let(:formatter) { described_class.new(metrics, nil, nil, timeseries) }
 
       it 'includes timeseries analysis section' do
         csv_output = formatter.generate
@@ -383,7 +387,7 @@ RSpec.describe KanbanMetrics::Formatters::CsvFormatter do
     end
 
     context 'with individual tickets provided' do
-      subject(:formatter) { described_class.new(metrics, nil, nil, issues) }
+      subject(:formatter) { described_class.new(metrics, nil, nil, nil, issues) }
 
       it 'includes individual tickets section in CSV output' do
         result = formatter.generate
@@ -443,7 +447,7 @@ RSpec.describe KanbanMetrics::Formatters::CsvFormatter do
     end
 
     context 'without individual tickets' do
-      subject(:formatter) { described_class.new(metrics, nil, nil, nil) }
+      subject(:formatter) { described_class.new(metrics, nil, nil, nil, nil) }
 
       it 'does not include individual tickets section' do
         result = formatter.generate
@@ -453,7 +457,7 @@ RSpec.describe KanbanMetrics::Formatters::CsvFormatter do
     end
 
     context 'with empty issues array' do
-      subject(:formatter) { described_class.new(metrics, nil, nil, []) }
+      subject(:formatter) { described_class.new(metrics, nil, nil, nil, []) }
 
       it 'does not include individual tickets section' do
         result = formatter.generate

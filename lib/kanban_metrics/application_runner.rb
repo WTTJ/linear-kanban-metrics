@@ -3,11 +3,12 @@
 module KanbanMetrics
   # Value object to encapsulate report data
   class ReportData
-    attr_reader :metrics, :team_metrics, :timeseries, :issues
+    attr_reader :metrics, :team_metrics, :teammate_metrics, :timeseries, :issues
 
-    def initialize(metrics:, team_metrics: nil, timeseries: nil, issues: nil)
+    def initialize(metrics:, team_metrics: nil, teammate_metrics: nil, timeseries: nil, issues: nil)
       @metrics = metrics
       @team_metrics = team_metrics
+      @teammate_metrics = teammate_metrics
       @timeseries = timeseries
       @issues = issues
     end
@@ -64,6 +65,7 @@ module KanbanMetrics
       ReportData.new(
         metrics: calculator.overall_metrics,
         team_metrics: build_team_metrics(calculator, options),
+        teammate_metrics: build_teammate_metrics(calculator, options),
         timeseries: build_timeseries(issues, options),
         issues: build_issues_for_report(issues, options)
       )
@@ -71,6 +73,10 @@ module KanbanMetrics
 
     def build_team_metrics(calculator, options)
       options[:team_metrics] ? calculator.team_metrics : nil
+    end
+
+    def build_teammate_metrics(calculator, options)
+      options[:teammate_metrics] ? calculator.teammate_metrics : nil
     end
 
     def build_timeseries(issues, options)
@@ -85,6 +91,7 @@ module KanbanMetrics
       Reports::KanbanReport.new(
         report_data.metrics,
         report_data.team_metrics,
+        report_data.teammate_metrics,
         report_data.timeseries,
         report_data.issues
       ).display(format || DEFAULT_FORMAT)

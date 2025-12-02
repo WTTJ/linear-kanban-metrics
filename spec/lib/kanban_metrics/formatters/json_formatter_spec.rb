@@ -5,7 +5,10 @@ require 'spec_helper'
 RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
   # === TEST DATA SETUP ===
   # Named Subject
-  subject(:formatter) { described_class.new(metrics, team_metrics, timeseries_data, issues_data) }
+  subject(:formatter) { described_class.new(metrics, team_metrics, teammate_metrics_data, timeseries_data, issues_data) }
+
+  # Default teammate_metrics_data for all tests (can be overridden in specific contexts)
+  let(:teammate_metrics_data) { nil }
 
   let(:metrics) do
     {
@@ -259,7 +262,7 @@ RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
     context 'when generating JSON with timeseries data' do
       it 'includes timeseries data in the output' do
         # Arrange
-        formatter = described_class.new(metrics, team_metrics, timeseries)
+        formatter = described_class.new(metrics, team_metrics, nil, timeseries)
 
         # Act
         json_output = formatter.generate
@@ -322,7 +325,7 @@ RSpec.describe KanbanMetrics::Formatters::JsonFormatter do
     context 'when timeseries data is provided' do
       it 'builds a comprehensive timeseries data hash' do
         # Arrange
-        formatter = described_class.new(metrics, team_metrics, timeseries)
+        formatter = described_class.new(metrics, team_metrics, nil, timeseries)
 
         # Act
         result = formatter.send(:build_timeseries_data)

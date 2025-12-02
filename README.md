@@ -101,10 +101,11 @@ Run the script to collect metrics:
 - `--team-id TEAM_ID` - Filter by specific team ID
 - `--start-date YYYY-MM-DD` - Start date for metrics collection
 - `--end-date YYYY-MM-DD` - End date for metrics collection
-- `--format FORMAT` - Output format (table, json, csv) - default: table
+- `--format FORMAT` - Output format (table, json, csv, markdown) - default: table
 - `--page-size SIZE` - Number of issues per page for API pagination (default: 250)
 - `--no-cache` - Disable API response caching (fetch fresh data)
 - `--team-metrics` - Include team-based metrics breakdown (disabled by default)
+- `--teammate-metrics` - Include individual teammate/assignee metrics breakdown (disabled by default)
 - `--include-archived` - Include archived tickets in the analysis (disabled by default)
 - `--ticket-details` - Include individual ticket details in output (disabled by default, works with all formats)
 
@@ -120,11 +121,20 @@ Run the script to collect metrics:
 # Include team metrics breakdown
 ./bin/kanban_metrics --team-metrics
 
+# Include individual teammate/assignee metrics breakdown
+./bin/kanban_metrics --teammate-metrics
+
+# Combine team and teammate metrics
+./bin/kanban_metrics --team-metrics --teammate-metrics
+
 # Filter by team and date range with team metrics
 ./bin/kanban_metrics --team-id "TEAM123" --start-date "2024-01-01" --end-date "2024-12-31" --team-metrics
 
 # Output as JSON
 ./bin/kanban_metrics --format json
+
+# Output as Markdown (great for documentation/reports)
+./bin/kanban_metrics --format markdown
 
 # Output as CSV with team metrics
 ./bin/kanban_metrics --format csv --team-metrics
@@ -203,6 +213,29 @@ By default, the script shows only overall metrics for improved performance and c
 ```
 
 Team metrics include per-team cycle time, lead time, throughput, and a comparison table across all teams.
+
+## 👤 Teammate Metrics (Optional)
+
+Use the `--teammate-metrics` flag to see metrics broken down by individual assignees:
+
+```bash
+# Show individual teammate metrics
+./bin/kanban_metrics --teammate-metrics
+
+# Export teammate metrics as JSON
+./bin/kanban_metrics --teammate-metrics --format json
+
+# Export teammate metrics as CSV
+./bin/kanban_metrics --teammate-metrics --format csv
+
+# Export teammate metrics as Markdown
+./bin/kanban_metrics --teammate-metrics --format markdown
+
+# Combine with team metrics for full breakdown
+./bin/kanban_metrics --team-metrics --teammate-metrics
+```
+
+Teammate metrics include per-assignee cycle time, lead time, throughput, and a comparison table across all teammates. This is useful for understanding individual workload and performance patterns.
 
 ## 📦 Archived Tickets
 
@@ -355,6 +388,37 @@ def456,PROJ-124,Login bug fix,Done,Frontend Team,Jane Smith,0,1.1,1.9
 - Proper handling of incomplete tickets (empty time fields for in-progress/backlog items)
 
 **Note**: Individual tickets are only included when using the `--ticket-details` flag. Without this flag, output contains only aggregated metrics.
+
+**Markdown Format** (`--format markdown`):
+```markdown
+# 📊 Kanban Metrics Report
+
+> Generated on 2024-06-15 14:30:00
+
+## 📈 Summary
+
+| Metric | Value | Description |
+|--------|-------|-------------|
+| Total Issues | 100 | Total number of issues in the dataset |
+| Completed Issues | 60 | Issues that have been finished/delivered |
+...
+
+## 👤 Teammate Metrics
+
+### 🧑‍💻 John Doe
+
+| Metric | Value |
+|--------|-------|
+| Total Issues | 30 |
+| Completed Issues | 25 |
+...
+```
+
+The Markdown format is perfect for:
+- 📝 **Documentation**: Easy to paste into wikis, READMEs, or Confluence
+- 📧 **Sharing**: Include in emails or Slack messages with proper formatting
+- 📊 **Reports**: Generate readable reports for stakeholders
+- 🔄 **Version Control**: Track metric changes over time in Git
 
 Perfect for:
 - 📊 **Data analysis** in Excel, Google Sheets, or BI tools
